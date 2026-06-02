@@ -18,7 +18,7 @@ Doruk Kumkumoğlu 2026
 | [2×20 Double Row Male GPIO Header](https://thepihut.com/products/break-away-0-1-2x20-pin-strip-dual-male-header) | x1 |
 | 0.3mm Ø Enameled Copper Wire (≥30cm length) — or any thin signal cable | x1 |
 
-Note: If you can find non-standard 8-9mm lenght pin headers, use those instead of the standard 2x20 Double Row Header specified in the list.
+Note: If you can find non-standard 8-9mm lenght pin headers, use those instead of the standard 2x20 double row header specified in the list.
 
 <br>
 
