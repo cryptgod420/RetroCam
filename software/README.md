@@ -96,9 +96,14 @@ Optocam Zero includes a hotspot mode and photo transfer interface optimized for 
 ### Transfer interface (External Device)
 After opening the address in a browser, the transfer interface will appear. All photos in your gallery are visible here and can be scrolled and browsed.
 
+![Transfer Interface](https://github.com/dorukkumkumoglu/optocamzero/blob/main/assets/hotspot-interface-1.png)
+
 Below the header logo, the total image count and available free space are displayed.
 - Photos can be downloaded individually by clicking the download icon in the top right corner of the photo.
 - Multiple photos can be selected using the selectors in the top left corner of each image. After selection, you may batch download or delete the selected photos.
 - For single image view, click on the image. Use the back button on screen to return, or swipe down on touch devices.
 - In single image view, use the left-right arrow keys or swipe left-right to browse between photos.
 - To view the full resolution image, click the HQ button in single image view.
+
+![Transfer Interface2](https://github.com/dorukkumkumoglu/optocamzero/blob/main/assets/hotspot-interface-2.png)
+
