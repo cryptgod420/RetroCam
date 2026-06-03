@@ -4,9 +4,7 @@ Optocam Zero is a Raspberry Pi Zero based compact digital camera made using off 
 
 I designed Optocam Zero to have a very compact, carry everywhere and have fun sort of camera. As I was inspired by Kodak charmera and similar toy cameras, I wanted it to be feel playful, enjoyable and be intuitive to use. I also aimed to make it relatively easy to build so that others can also build one and have fun with it. That's why all the case parts are easily printable and for the electronics it uses off the shelf components that are easy to find.
 
-<br>
-
-![exploded view](assets/DSCG1515.jpg)
+![exploded view](assets/DSCG1663.jpg)
 
 <br>
 
@@ -34,8 +32,6 @@ I designed Optocam Zero to have a very compact, carry everywhere and have fun so
 - 70–80 minutes of use per charge.
 - Dimensions: 51×71×18mm (excluding camera and screen bump)
   
-![exploded view](assets/DSCG1663.jpg)
-
 <br>
 
 ## Sample Photos
