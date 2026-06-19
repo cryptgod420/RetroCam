@@ -18,6 +18,7 @@ I designed Optocam Zero to have a very compact, carry everywhere and have fun so
 - Off the shelf/ common components for the electronics.
 - Fully 3D printed case parts (apart from fasteners).
 - 3D printable TPU protective sleeve and lanyard design is available.
+- NEW - 10 Frame GIF recording and playback in GIF mode.
 
 <br>
 
