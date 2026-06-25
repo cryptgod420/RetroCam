@@ -223,4 +223,8 @@ echo "Gallery: open 192.168.4.1 in a browser while connected to the hotspot"
 echo ""
 echo -e "${YELLOW}Rebooting in 5 seconds... (Ctrl+C to cancel)${NC}"
 sleep 5
+# Flush config.txt / fstab writes to disk before rebooting. With the deferred
+# /boot/firmware automount, an unsynced config.txt write can fail to persist
+# across the reboot, so force it explicitly.
+sync
 reboot
