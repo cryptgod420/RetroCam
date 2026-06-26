@@ -14,6 +14,9 @@ MEDIA_EXTS = (".jpg", ".gif")
 
 app = Flask(__name__)
 
+# token -> {"sent": int, "total": int, "ts": float} — live zip download progress.
+DOWNLOAD_PROGRESS = {}
+
 
 def capture_number_of(filename):
     """Numeric id from Optocamzero_<n>.<ext>, or None. Shared ordering across
@@ -57,25 +60,40 @@ body {
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior: none;
 }
+/* While the viewer is open, make the page background black too, so no gray
+   (body color) shows in any strip the fixed viewer doesn't cover on iOS. */
+body:has(#viewer.open) { background: #000; }
 header {
     border-bottom: 1px solid #1e1e1e;
-    padding-bottom: 12px;
+    padding-top: 21px;    /* less top than bottom to offset the 14px body padding above */
+    padding-bottom: 35px;
     margin-bottom: 14px;
+    /* Stretch past the body's 14px padding so the divider spans the full width. */
+    margin-left: -14px;
+    margin-right: -14px;
     display: flex;
     flex-direction: column;
     align-items: center;
 }
-.logo { height: 30px; width: auto; display: block; margin-top: 22px; margin-bottom: 22px; }
+.logo { height: 30px; width: auto; display: block; }
 @media (min-width: 768px) {
-    .logo { margin-top: 32px; }
+    header { padding-top: 26px; padding-bottom: 40px; }
 }
 .meta {
-    width: 100%;
     display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    color: #444;
+    gap: 18px;
+    font-size: 12px;
+    color: #555;
     letter-spacing: 1px;
+}
+/* Counter and free-space share one size (the counter's). */
+.meta span { font-size: 12px; }
+/* Row holding the grouped meta (left) and the grid-density toggle (right). */
+.meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
 }
 .grid {
     display: grid;
@@ -84,17 +102,32 @@ header {
     padding-bottom: 50px;
 }
 @media (min-width: 768px) {
-    .grid {
-        grid-template-columns: repeat(4, 1fr);
-    }
+    .grid { grid-template-columns: repeat(5, 1fr); }   /* desktop default */
+    /* Gap tightens as density increases: 5-col 8px, 6-col 7px, 7-col 6px. */
+    .grid.dcols-5 { grid-template-columns: repeat(5, 1fr); }
+    .grid.dcols-6 { grid-template-columns: repeat(6, 1fr); gap: 7px; }
+    .grid.dcols-7 { grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    /* Uniform control sizing across all desktop densities:
+       21px selection ring, 22px download icon. */
+    .grid .sel-circle::before { width: 21px; height: 21px; }
+    .grid .item.sel .sel-circle::after { top: 17.5px; left: 17.5px; }
+    .grid .dl-icon { width: 22px; height: 22px; }
 }
 @media (min-width: 1200px) {
     .grid {
-        grid-template-columns: repeat(5, 1fr);
         max-width: 1400px;
         margin: 0 auto;
     }
 }
+/* Stop iOS Safari from hijacking long-press on thumbnails (the image
+   callout/"Save Image" menu, magnified preview and image drag) — otherwise it
+   cancels the touch and the glide-to-select can't run. */
+.grid, .grid * {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.img-btn img { -webkit-user-drag: none; }
 .item {
     background: #101010;
     border: 1px solid #1a1a1a;
@@ -104,6 +137,16 @@ header {
 }
 .item.sel { border-color: #1a1a1a; }
 .img-wrap { position: relative; }
+/* Tint selected thumbnails — overlay sits above the image but below the
+   dot / download / GIF-badge controls (z-index 2). */
+.item.sel .img-wrap::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+    z-index: 1;
+}
 .img-btn {
     display: block;
     width: 100%;
@@ -120,25 +163,32 @@ header {
 }
 .sel-circle {
     position: absolute;
-    top: 7px;
-    left: 7px;
-    width: 22px;
-    height: 22px;
+    /* Anchored to the very corner so there's no dead margin around the dot;
+       the ring (::before) is offset inward to keep its visual position. */
+    top: 0;
+    left: 0;
+    /* Visible ring stays 23px (the ::before); the button itself is larger to
+       give a bigger, easier-to-hit tap target without changing the look. */
+    width: 54px;
+    height: 54px;
     border-radius: 50%;
     border: none;
     background: transparent;
     cursor: pointer;
     z-index: 2;
     transition: none;
+    touch-action: pan-y;   /* vertical drags still scroll; horizontal glide selects */
 }
 .sel-circle::before {
     content: '';
-    width: 22px;
-    height: 22px;
+    position: absolute;   /* offset inward from the corner-anchored button */
+    top: 7px;
+    left: 7px;
+    width: 23px;
+    height: 23px;
     border-radius: 50%;
     border: 1.5px solid rgba(255,255,255,0.45);
     background: rgba(0,0,0,0.45);
-    display: block;
     transition: background 0.12s, border-color 0.12s;
     box-sizing: border-box;
 }
@@ -149,8 +199,9 @@ header {
 .item.sel .sel-circle::after {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
+    /* Centered on the 23px ring (offset 7px inward from the button corner). */
+    top: 18.5px;
+    left: 18.5px;
     width: 5px;
     height: 9px;
     border: 2px solid #000;
@@ -162,10 +213,10 @@ header {
     position: absolute;
     top: 7px;
     right: 7px;
-    width: 28px;
-    height: 28px;
-    background: rgba(0,0,0,0.55);
-    border: 1px solid rgba(255,255,255,0.12);
+    width: 24px;
+    height: 24px;
+    background: rgba(0,0,0,0.6);
+    border: none;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -187,11 +238,85 @@ header {
     letter-spacing: 1px;
     color: #fff;
     background: rgba(0,0,0,0.6);
-    border: 1px solid rgba(255,255,255,0.25);
+    border: none;
     border-radius: 999px;        /* fully rounded ends → pill */
     z-index: 2;
     pointer-events: none;
 }
+
+/* ── Toolbar (meta + filter/order controls), below the header divider ── */
+.toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 28px;
+}
+.controls {
+    display: flex;
+    justify-content: space-between;
+    gap: 22px;
+    flex-wrap: wrap;
+}
+@media (min-width: 768px) {
+    /* Desktop: meta on the left, controls on the right, one row. */
+    .toolbar {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+    #density-group { display: none; }   /* density toggle is mobile-only */
+}
+@media (min-width: 1200px) {
+    /* Match the grid's centered max width so the toolbar's left and right
+       edges line up with the image block. */
+    .toolbar {
+        max-width: 1400px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+.density-group button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+}
+.density-group svg { display: block; fill: currentColor; }
+/* Grid density (mobile only — desktop keeps its 4/5 columns). */
+@media (max-width: 767px) {
+    /* Gap tightens as density increases: 2-col 8px, 3-col 7px, 4-col 6px. */
+    .grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid.cols-3 { grid-template-columns: repeat(3, 1fr); gap: 7px; }
+    .grid.cols-4 { grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    /* 4-col also drops the per-thumb download icon. */
+    .grid.cols-4 .dl-icon { display: none; }
+    #desktop-density-group { display: none; }   /* desktop-only selector */
+    /* Denser grids: smaller selection ring (20px) and, on 3-col, download icon. */
+    .grid.cols-3 .sel-circle::before,
+    .grid.cols-4 .sel-circle::before { width: 20px; height: 20px; }
+    .grid.cols-3 .item.sel .sel-circle::after,
+    .grid.cols-4 .item.sel .sel-circle::after { top: 17px; left: 17px; }
+    .grid.cols-3 .dl-icon { width: 21px; height: 21px; }
+}
+.ctrl-group {
+    display: inline-flex;
+    border: 1px solid #1e1e1e;
+    border-radius: 11px;
+    overflow: hidden;
+}
+.ctrl-group button {
+    font-family: 'CamFont', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: #555;
+    background: #080808;
+    border: none;
+    padding: 7px 12px;
+    cursor: pointer;
+    transition: color 0.12s, background 0.12s;
+}
+.ctrl-group button + button { border-left: 1px solid #1e1e1e; }
+.ctrl-group button.active { color: #fff; background: #141414; }
 
 /* ── Viewer ── */
 #viewer {
@@ -202,6 +327,7 @@ header {
     flex-direction: column;
     display: none;
     pointer-events: none;
+    transform: translateZ(0);   /* own compositing layer — avoids iOS paint bleed */
 }
 #viewer.open { display: flex; pointer-events: auto; }
 .viewer-header {
@@ -337,45 +463,70 @@ header {
     bottom: 0; left: 0; right: 0;
     background: #080808;
     border-top: 1px solid #2a2a2a;
-    padding: 10px 16px 12px;
+    padding: 12px 16px;
+    padding-top: 14px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
     display: none;
-    flex-direction: column;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    gap: 12px;
     z-index: 50;
 }
-@media (min-width: 768px) {
-    #sel-bar { padding-bottom: 46px; }
+/* Short background skirt below the bar to cover the few-px gap that can flash
+   during a fast scroll while Safari's URL bar collapses. */
+#sel-bar::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 24px;
+    background: #080808;
+    pointer-events: none;
 }
-#sel-bar.open { display: flex; }
-.sel-top { display: flex; align-items: center; gap: 12px; margin: 4px 0; }
-#sel-count { font-size: 12px; color: #666; letter-spacing: 1px; }
+@media (min-width: 768px) {
+    /* Desktop: group the content in the center rather than spreading it edge-to-edge. */
+    #sel-bar { padding-top: 26px; padding-bottom: 34px; justify-content: center; gap: 28px; }
+}
+#sel-bar.open { display: flex; animation: sel-bar-up 0.18s ease-out; }
+@keyframes sel-bar-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+.sel-left { display: flex; align-items: center; gap: 9px; }
+.sel-info { display: flex; flex-direction: column; gap: 2px; }
+#sel-count { font-size: 12px; color: #888; letter-spacing: 1px; line-height: 1; }
+#sel-size { font-size: 12px; color: #555; letter-spacing: 1px; line-height: 1; }
 #desel-btn {
     display: flex;
     align-items: center;
     justify-content: center;
     background: none;
-    border: none;
+    border: 1px solid #2a2a2a;
+    border-radius: 50%;
     cursor: pointer;
     padding: 0;
-    width: 20px;
-    height: 20px;
-    transform: translateY(-1px);
+    width: 30px;
+    height: 30px;
+    color: #fff;
 }
 #desel-btn svg { display: block; }
 .sel-bar-btns { display: flex; gap: 8px; }
 #dl-all-btn, #del-btn {
     font-family: 'CamFont', monospace;
     font-size: 12px;
-    letter-spacing: 2px;
+    letter-spacing: 1px;
     background: #080808;
     border: 1px solid #333;
-    border-radius: 3px;
-    padding: 8px 16px;
+    border-radius: 11px;
+    padding: 8px 14px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 #dl-all-btn { color: #fff; }
-#del-btn { color: #e03030; border-color: #3a1a1a; }
+#del-btn { color: #e8554f; border-color: #3a1a1a; }
 
 /* ── Confirm popup ── */
 #confirm-overlay {
@@ -392,7 +543,7 @@ header {
 #confirm-box {
     background: #080808;
     border: 1px solid #2a2a2a;
-    border-radius: 4px;
+    border-radius: 11px;
     padding: 24px 20px;
     width: 80%;
     max-width: 280px;
@@ -412,7 +563,7 @@ header {
     font-size: 12px;
     letter-spacing: 2px;
     padding: 8px 16px;
-    border-radius: 3px;
+    border-radius: 11px;
     cursor: pointer;
     background: #080808;
     border: 1px solid #333;
@@ -429,20 +580,26 @@ header {
 #top-btn {
     position: fixed;
     bottom: 20px;
-    right: 16px;
+    right: 22px;
     width: 38px;
     height: 38px;
-    background: #141414;
+    background: #080808;
     border: 1px solid #2a2a2a;
     border-radius: 50%;
-    color: #888;
+    color: #fff;
     display: none;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     z-index: 40;
+    transition: bottom 0.18s ease;
 }
 #top-btn.visible { display: flex; }
+/* Lift it above the selection bar when that bar is open. */
+body:has(#sel-bar.open) #top-btn { bottom: calc(76px + env(safe-area-inset-bottom)); }
+@media (min-width: 768px) {
+    body:has(#sel-bar.open) #top-btn { bottom: 104px; }
+}
 #drag-select {
     position: fixed;
     border: 1px solid rgba(255,255,255,0.35);
@@ -451,25 +608,123 @@ header {
     z-index: 30;
     display: none;
 }
+#dl-progress {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;                  /* centered, short enough to clear the go-up circle */
+    max-width: 360px;
+    bottom: 35px;                 /* resting — tracks the go-up button */
+    height: 10px;
+    background: #080808;          /* track — matches the selection overlay */
+    border: 1px solid #2a2a2a;
+    border-radius: 999px;
+    overflow: hidden;
+    z-index: 300;
+    display: none;
+    pointer-events: none;
+    transition: bottom 0.18s ease;
+}
+/* Rise with the go-up button when the selection bar is open. */
+body:has(#sel-bar.open) #dl-progress {
+    bottom: calc(91px + env(safe-area-inset-bottom));
+}
+@media (min-width: 768px) {
+    body:has(#sel-bar.open) #dl-progress { bottom: 119px; }
+}
+#dl-progress.active { display: block; }
+#dl-progress-fill {
+    height: 100%;
+    width: 0;
+    background: #fff;
+    border-radius: 999px;
+    transition: width 0.18s linear;
+}
 </style>
 </head>
 <body>
 
 <header>
   <img class="logo" src="/logo" alt="OptoCam">
-  <div class="meta">
-    <span>{{ count }} IMAGE{% if count != 1 %}S{% endif %}</span>
-    <span>{{ free_space }} FREE</span>
-  </div>
 </header>
+
+<div class="toolbar">
+  <div class="meta-row">
+    <div class="meta">
+      <span>{{ count }} IMAGE{% if count != 1 %}S{% endif %}</span>
+      <span>{{ free_space }} FREE</span>
+    </div>
+    {% if has_media %}
+    <div class="ctrl-group density-group" id="density-group">
+      <button data-val="2" class="active" onclick="setDensity('2')" aria-label="2 columns">
+        <svg viewBox="0 0 14 14" width="13" height="13" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="5" height="5"/><rect x="8" y="1" width="5" height="5"/>
+          <rect x="1" y="8" width="5" height="5"/><rect x="8" y="8" width="5" height="5"/>
+        </svg>
+      </button>
+      <button data-val="3" onclick="setDensity('3')" aria-label="3 columns">
+        <svg viewBox="0 0 14 14" width="13" height="13" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="3" height="3"/><rect x="5.5" y="1" width="3" height="3"/><rect x="10" y="1" width="3" height="3"/>
+          <rect x="1" y="5.5" width="3" height="3"/><rect x="5.5" y="5.5" width="3" height="3"/><rect x="10" y="5.5" width="3" height="3"/>
+          <rect x="1" y="10" width="3" height="3"/><rect x="5.5" y="10" width="3" height="3"/><rect x="10" y="10" width="3" height="3"/>
+        </svg>
+      </button>
+      <button data-val="4" onclick="setDensity('4')" aria-label="4 columns">
+        <svg viewBox="0 0 14 14" width="13" height="13" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="2.25" height="2.25"/><rect x="4.25" y="1" width="2.25" height="2.25"/><rect x="7.5" y="1" width="2.25" height="2.25"/><rect x="10.75" y="1" width="2.25" height="2.25"/>
+          <rect x="1" y="4.25" width="2.25" height="2.25"/><rect x="4.25" y="4.25" width="2.25" height="2.25"/><rect x="7.5" y="4.25" width="2.25" height="2.25"/><rect x="10.75" y="4.25" width="2.25" height="2.25"/>
+          <rect x="1" y="7.5" width="2.25" height="2.25"/><rect x="4.25" y="7.5" width="2.25" height="2.25"/><rect x="7.5" y="7.5" width="2.25" height="2.25"/><rect x="10.75" y="7.5" width="2.25" height="2.25"/>
+          <rect x="1" y="10.75" width="2.25" height="2.25"/><rect x="4.25" y="10.75" width="2.25" height="2.25"/><rect x="7.5" y="10.75" width="2.25" height="2.25"/><rect x="10.75" y="10.75" width="2.25" height="2.25"/>
+        </svg>
+      </button>
+    </div>
+    {% endif %}
+  </div>
+  {% if has_media %}
+  <div class="controls">
+    <div class="ctrl-group" id="filter-group">
+      <button data-val="all" class="active" onclick="setFilter('all')">ALL</button>
+      <button data-val="photos" onclick="setFilter('photos')">PHOTOS</button>
+      <button data-val="gifs" onclick="setFilter('gifs')">GIFS</button>
+    </div>
+    <div class="ctrl-group" id="order-group">
+      <button data-val="newest" class="active" onclick="setOrder('newest')">NEWEST</button>
+      <button data-val="oldest" onclick="setOrder('oldest')">OLDEST</button>
+    </div>
+    <div class="ctrl-group density-group" id="desktop-density-group">
+      <button data-val="5" class="active" onclick="setDesktopDensity('5')" aria-label="5 columns">
+        <svg viewBox="0 0 14 14" width="13" height="13" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="5" height="5"/><rect x="8" y="1" width="5" height="5"/>
+          <rect x="1" y="8" width="5" height="5"/><rect x="8" y="8" width="5" height="5"/>
+        </svg>
+      </button>
+      <button data-val="6" onclick="setDesktopDensity('6')" aria-label="6 columns">
+        <svg viewBox="0 0 14 14" width="13" height="13" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="3" height="3"/><rect x="5.5" y="1" width="3" height="3"/><rect x="10" y="1" width="3" height="3"/>
+          <rect x="1" y="5.5" width="3" height="3"/><rect x="5.5" y="5.5" width="3" height="3"/><rect x="10" y="5.5" width="3" height="3"/>
+          <rect x="1" y="10" width="3" height="3"/><rect x="5.5" y="10" width="3" height="3"/><rect x="10" y="10" width="3" height="3"/>
+        </svg>
+      </button>
+      <button data-val="7" onclick="setDesktopDensity('7')" aria-label="7 columns">
+        <svg viewBox="0 0 14 14" width="13" height="13" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="1" width="2.25" height="2.25"/><rect x="4.25" y="1" width="2.25" height="2.25"/><rect x="7.5" y="1" width="2.25" height="2.25"/><rect x="10.75" y="1" width="2.25" height="2.25"/>
+          <rect x="1" y="4.25" width="2.25" height="2.25"/><rect x="4.25" y="4.25" width="2.25" height="2.25"/><rect x="7.5" y="4.25" width="2.25" height="2.25"/><rect x="10.75" y="4.25" width="2.25" height="2.25"/>
+          <rect x="1" y="7.5" width="2.25" height="2.25"/><rect x="4.25" y="7.5" width="2.25" height="2.25"/><rect x="7.5" y="7.5" width="2.25" height="2.25"/><rect x="10.75" y="7.5" width="2.25" height="2.25"/>
+          <rect x="1" y="10.75" width="2.25" height="2.25"/><rect x="4.25" y="10.75" width="2.25" height="2.25"/><rect x="7.5" y="10.75" width="2.25" height="2.25"/><rect x="10.75" y="10.75" width="2.25" height="2.25"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  {% endif %}
+</div>
 
 {% if files %}
 <div class="grid" id="grid">
   {% for f in files %}
   <div class="item" data-file="{{ f }}" data-idx="{{ loop.index0 }}">
     <div class="img-wrap">
-      <button class="img-btn" onclick="openViewer({{ loop.index0 }})">
-        <img src="/thumb/{{ f }}" loading="lazy" alt="{{ f }}">
+      <button class="img-btn" onclick="openViewer(this)">
+        <img src="/thumb/{{ f }}" loading="lazy" alt="{{ f }}" draggable="false">
       </button>
       {% if f.lower().endswith('.gif') %}<span class="gif-badge">GIF</span>{% endif %}
       <button class="sel-circle" onclick="toggleSel(event, this)"></button>
@@ -482,6 +737,7 @@ header {
   </div>
   {% endfor %}
 </div>
+<div class="empty" id="empty-msg" style="display:none">&gt; NONE_</div>
 {% else %}
 <div class="empty">&gt; NO IMAGES_</div>
 {% endif %}
@@ -492,7 +748,7 @@ header {
     <button class="viewer-back" onclick="closeViewer()"><svg viewBox="0 0 16 16" width="13" height="13" xmlns="http://www.w3.org/2000/svg" style="position:relative;top:-1px;"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>BACK</button>
     <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
       <span class="viewer-pos" id="viewer-pos"></span>
-      <span id="viewer-filename" style="font-size:11px;color:#666;letter-spacing:0.5px;"></span>
+      <span id="viewer-filename" style="font-size:12px;color:#666;letter-spacing:0.5px;"></span>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
       <button class="viewer-hq" id="viewer-hq" onclick="toggleHQ()">HQ</button>
@@ -526,17 +782,26 @@ header {
 
 <!-- Selection bar -->
 <div id="sel-bar">
-  <div class="sel-top">
-    <span id="sel-count"></span>
-    <button id="desel-btn" onclick="deselectAll()">
+  <div class="sel-left">
+    <button id="desel-btn" onclick="deselectAll()" aria-label="Clear selection">
       <svg viewBox="0 0 16 16" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 3l10 10M13 3L3 13" stroke="#555" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
       </svg>
     </button>
+    <div class="sel-info">
+      <span id="sel-count"></span>
+      <span id="sel-size"></span>
+    </div>
   </div>
   <div class="sel-bar-btns">
-    <button id="dl-all-btn" onclick="downloadSelected()">DOWNLOAD ALL</button>
-    <button id="del-btn" onclick="confirmDelete()">DELETE ALL</button>
+    <button id="dl-all-btn" onclick="downloadSelected()">
+      <svg viewBox="0 0 16 16" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 1v9M4 7l4 4 4-4M2 14h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>SAVE</button>
+    <button id="del-btn" onclick="confirmDelete()">
+      <svg viewBox="0 0 16 16" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 3.5h12M5.5 3.5V1.5h5v2M3.5 3.5l.8 10h7.4l.8-10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>DELETE</button>
   </div>
 </div>
 
@@ -551,29 +816,147 @@ header {
   </div>
 </div>
 
+<!-- Download progress pill -->
+<div id="dl-progress"><div id="dl-progress-fill"></div></div>
+
 <script>
-const files = {{ files_json | safe }};
+// allFiles: every media file, newest-first (the order the grid is rendered in).
+// files: the currently visible subset, in display order — what the viewer walks.
+let allFiles = {{ files_json | safe }};
+let files = allFiles.slice();
 const gifs = new Set({{ gifs_json | safe }});
+const sizes = {{ sizes_json | safe }};   // filename -> bytes
 const selected = new Set();
+
+function formatSize(bytes) {
+    // Decimal units (1 MB = 1,000,000 bytes) to match how macOS/iOS report sizes.
+    if (bytes >= 1e9) return Math.round(bytes / 1e9) + ' GB';
+    if (bytes >= 1e6) return Math.round(bytes / 1e6) + ' MB';
+    if (bytes >= 1e3) return Math.round(bytes / 1e3) + ' KB';
+    return bytes + ' B';
+}
 let viewerIdx = 0;
 let hqMode = false;
+let viewerScrollY = 0;   // page scroll position saved while the viewer is open
+
+let curFilter = 'all';   // all | photos | gifs
+let curOrder = 'newest'; // newest | oldest
+let curDensity = '2';          // mobile grid columns: 2 | 3 | 4
+let curDesktopDensity = '5';   // desktop grid columns: 5 | 6 | 7
+
+const grid = document.getElementById('grid');
+// filename -> grid item element, so we can show/hide and reorder in place.
+const itemEls = {};
+if (grid) document.querySelectorAll('.item').forEach(el => { itemEls[el.dataset.file] = el; });
 
 function isGif(f) { return gifs.has(f); }
 
+function matchesFilter(f) {
+    if (curFilter === 'photos') return !isGif(f);
+    if (curFilter === 'gifs') return isGif(f);
+    return true;
+}
 
-function toggleSel(e, circle) {
-    e.stopPropagation();
-    const item = circle.closest('.item');
+// Recompute the visible subset, reorder the grid to match, and keep `files`
+// (used by the viewer) in lockstep so navigation stays correct.
+function applyView() {
+    let view = allFiles.filter(matchesFilter);
+    if (curOrder === 'oldest') view = view.slice().reverse();
+    files = view;
+    const viewSet = new Set(view);
+    if (grid) {
+        // Append visible items in view order; appendChild moves existing nodes,
+        // so the grid ends up in exactly this order.
+        view.forEach(f => { const el = itemEls[f]; if (el) { el.style.display = ''; grid.appendChild(el); } });
+        allFiles.forEach(f => { if (!viewSet.has(f)) { const el = itemEls[f]; if (el) el.style.display = 'none'; } });
+        grid.style.display = view.length === 0 ? 'none' : '';
+    }
+    const span = document.querySelector('.meta span');
+    if (span) span.textContent = view.length + ' IMAGE' + (view.length !== 1 ? 'S' : '');
+    const empty = document.getElementById('empty-msg');
+    if (empty) empty.style.display = view.length === 0 ? 'block' : 'none';
+}
+
+function setActive(groupId, val) {
+    document.querySelectorAll('#' + groupId + ' button')
+        .forEach(b => b.classList.toggle('active', b.dataset.val === val));
+}
+
+function setFilter(v) {
+    if (v === curFilter) return;
+    curFilter = v;
+    setActive('filter-group', v);
+    applyView();
+}
+
+function setOrder(v) {
+    if (v === curOrder) return;
+    curOrder = v;
+    setActive('order-group', v);
+    applyView();
+}
+
+// Grid density: just toggles a CSS class (6-col layout applies on mobile only).
+// Independent of filtering/ordering, so it never touches the files arrays.
+function setDensity(v) {
+    if (v === curDensity) return;
+    curDensity = v;
+    setActive('density-group', v);
+    if (grid) {
+        grid.classList.remove('cols-2', 'cols-3', 'cols-4');
+        grid.classList.add('cols-' + v);
+    }
+    try { localStorage.setItem('optocam_density', v); } catch (e) {}
+}
+
+// Restore the saved density on load.
+try {
+    const d = localStorage.getItem('optocam_density');
+    if (d && ['2', '3', '4'].includes(d)) setDensity(d);
+} catch (e) {}
+
+function setDesktopDensity(v) {
+    if (v === curDesktopDensity) return;
+    curDesktopDensity = v;
+    setActive('desktop-density-group', v);
+    if (grid) {
+        grid.classList.remove('dcols-5', 'dcols-6', 'dcols-7');
+        grid.classList.add('dcols-' + v);
+    }
+    try { localStorage.setItem('optocam_density_desktop', v); } catch (e) {}
+}
+
+// Restore the saved desktop density on load.
+try {
+    const d = localStorage.getItem('optocam_density_desktop');
+    if (d && ['5', '6', '7'].includes(d)) setDesktopDensity(d);
+} catch (e) {}
+
+
+function setItemSelected(item, sel) {
     const f = item.dataset.file;
-    if (selected.has(f)) { selected.delete(f); item.classList.remove('sel'); }
-    else { selected.add(f); item.classList.add('sel'); }
+    if (sel) { selected.add(f); item.classList.add('sel'); }
+    else { selected.delete(f); item.classList.remove('sel'); }
+}
+
+function refreshSelBar() {
     const bar = document.getElementById('sel-bar');
     if (selected.size > 0) {
         bar.classList.add('open');
         document.getElementById('sel-count').textContent = selected.size + ' SELECTED';
+        let bytes = 0;
+        selected.forEach(f => { bytes += sizes[f] || 0; });
+        document.getElementById('sel-size').textContent = formatSize(bytes);
     } else {
         bar.classList.remove('open');
     }
+}
+
+function toggleSel(e, circle) {
+    e.stopPropagation();
+    const item = circle.closest('.item');
+    setItemSelected(item, !item.classList.contains('sel'));
+    refreshSelBar();
 }
 
 function preloadAhead(idx) {
@@ -586,19 +969,36 @@ function preloadAhead(idx) {
     });
 }
 
-function openViewer(idx) {
+function openViewer(el) {
+    // Resolve the index from the item's filename against the live `files`
+    // array so selection stays correct after deletions reindex the grid.
+    const f = el.closest('.item').dataset.file;
+    const idx = files.indexOf(f);
+    if (idx === -1) return;
     viewerIdx = idx;
     hqMode = false;
     document.getElementById('viewer-hq').classList.remove('active');
     updateViewer();
     preloadAhead(idx);
     document.getElementById('viewer').classList.add('open');
+    // Fully lock the background so the scrolled grid can't bleed through the
+    // overlay on iOS Safari (overflow:hidden alone doesn't lock it).
+    viewerScrollY = window.scrollY;
+    document.body.style.position = 'fixed';
+    document.body.style.top = (-viewerScrollY) + 'px';
+    document.body.style.left = '0';
+    document.body.style.right = '0';
     document.body.style.overflow = 'hidden';
 }
 
 function closeViewer() {
     document.getElementById('viewer').classList.remove('open');
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
     document.body.style.overflow = '';
+    window.scrollTo(0, viewerScrollY);
     hqMode = false;
     document.getElementById('viewer-hq').classList.remove('active');
 }
@@ -620,6 +1020,7 @@ function updateViewer() {
     const spinner = document.getElementById('spinner');
     const f = files[viewerIdx];
     const gif = isGif(f);
+    resetZoom(false);   // each image opens unzoomed
     img.style.display = 'none';
     spinner.classList.add('active');
     // GIFs always play their full animated original; photos use the sized thumb / HQ
@@ -669,27 +1070,148 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// Swipe gestures in viewer
+// Viewer: double-tap to zoom, drag to pan while zoomed, swipe to nav/close otherwise.
 let touchStartX = 0, touchStartY = 0, multiTouch = false;
+let zoomScale = 1, panX = 0, panY = 0;
+let panOrigX = 0, panOrigY = 0, panning = false;
+let lastTapTime = 0, lastTapX = 0, lastTapY = 0;
+let pinching = false, pinchStartDist = 0, pinchStartScale = 1;
+let pinchContentX = 0, pinchContentY = 0, pinchEndTime = 0;
+const ZOOM = 2.5, MAX_ZOOM = 5;
 const vb = document.getElementById('viewer-body');
+
+function applyTransform(animate) {
+    const img = document.getElementById('viewer-img');
+    img.style.transition = animate ? 'transform 0.2s ease' : 'none';
+    img.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomScale + ')';
+    img.style.cursor = zoomScale > 1 ? 'grab' : '';
+}
+
+function resetZoom(animate) {
+    zoomScale = 1; panX = 0; panY = 0; panning = false;
+    applyTransform(animate);
+}
+
+function clampPan() {
+    const img = document.getElementById('viewer-img');
+    const maxX = Math.max(0, (img.offsetWidth * zoomScale - vb.clientWidth) / 2);
+    const maxY = Math.max(0, (img.offsetHeight * zoomScale - vb.clientHeight) / 2);
+    panX = Math.max(-maxX, Math.min(maxX, panX));
+    panY = Math.max(-maxY, Math.min(maxY, panY));
+}
+
+// Zoom toward the tapped point; if already zoomed, zoom back out.
+function toggleZoomAt(clientX, clientY) {
+    if (zoomScale > 1) { resetZoom(true); return; }
+    const img = document.getElementById('viewer-img');
+    const r = vb.getBoundingClientRect();
+    let px = (clientX - r.left) - r.width / 2;
+    let py = (clientY - r.top) - r.height / 2;
+    px = Math.max(-img.offsetWidth / 2, Math.min(img.offsetWidth / 2, px));
+    py = Math.max(-img.offsetHeight / 2, Math.min(img.offsetHeight / 2, py));
+    zoomScale = ZOOM;
+    panX = -px * (ZOOM - 1);
+    panY = -py * (ZOOM - 1);
+    clampPan();
+    applyTransform(true);
+}
+
 vb.addEventListener('touchstart', e => {
-    multiTouch = e.touches.length > 1;
+    if (e.touches.length >= 2) {           // begin pinch
+        multiTouch = true; pinching = true; panning = false;
+        const t0 = e.touches[0], t1 = e.touches[1];
+        pinchStartDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY) || 1;
+        pinchStartScale = zoomScale;
+        const r = vb.getBoundingClientRect();
+        const mx = (t0.clientX + t1.clientX) / 2 - r.left - r.width / 2;
+        const my = (t0.clientY + t1.clientY) / 2 - r.top - r.height / 2;
+        pinchContentX = (mx - panX) / zoomScale;   // content point under the pinch centre
+        pinchContentY = (my - panY) / zoomScale;
+        return;
+    }
+    multiTouch = false; pinching = false; panning = false;
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
-}, {passive:true});
+    panOrigX = panX; panOrigY = panY;
+}, {passive: true});
+
 vb.addEventListener('touchmove', e => {
-    if (e.touches.length > 1) multiTouch = true;
-}, {passive:true});
+    if (pinching && e.touches.length >= 2) {
+        e.preventDefault();               // our pinch — not the page's
+        const t0 = e.touches[0], t1 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+        zoomScale = Math.max(1, Math.min(MAX_ZOOM, pinchStartScale * (dist / pinchStartDist)));
+        const r = vb.getBoundingClientRect();
+        const mx = (t0.clientX + t1.clientX) / 2 - r.left - r.width / 2;
+        const my = (t0.clientY + t1.clientY) / 2 - r.top - r.height / 2;
+        panX = mx - pinchContentX * zoomScale;     // keep that content point under the fingers
+        panY = my - pinchContentY * zoomScale;
+        clampPan();
+        applyTransform(false);
+        return;
+    }
+    if (pinching) return;
+    if (zoomScale > 1) {
+        const t = e.touches[0];
+        const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
+        if (panning || Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+            panning = true;
+            e.preventDefault();           // pan the image, don't scroll/swipe
+            panX = panOrigX + dx;
+            panY = panOrigY + dy;
+            clampPan();
+            applyTransform(false);
+        }
+    }
+}, {passive: false});
+
 vb.addEventListener('touchend', e => {
-    if (multiTouch) { multiTouch = false; return; }
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (pinching) {
+        if (e.touches.length >= 2) return;
+        pinching = false;
+        pinchEndTime = Date.now();
+        if (zoomScale <= 1.01) resetZoom(true);
+        else { clampPan(); applyTransform(true); }
+        if (e.touches.length === 1) {     // a finger remains → continue as a pan
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            panOrigX = panX; panOrigY = panY;
+            multiTouch = false; panning = false;
+        }
+        return;
+    }
+    if (multiTouch) { multiTouch = false; panning = false; return; }
+    if (panning) { panning = false; return; }
+    const ex = e.changedTouches[0].clientX, ey = e.changedTouches[0].clientY;
+    const dx = ex - touchStartX, dy = ey - touchStartY;
+    if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+        if (Date.now() - pinchEndTime < 400) return;   // ignore stray taps right after a pinch
+        const now = Date.now();
+        if (now - lastTapTime < 300 &&
+            Math.abs(ex - lastTapX) < 40 && Math.abs(ey - lastTapY) < 40) {
+            toggleZoomAt(ex, ey);
+            lastTapTime = 0;
+            return;
+        }
+        lastTapTime = now; lastTapX = ex; lastTapY = ey;
+        return;
+    }
+    if (zoomScale > 1) return;             // while zoomed, drags pan — no nav/close
     if (Math.abs(dy) > Math.abs(dx) && dy > 60) { closeViewer(); return; }
     if (Math.abs(dx) > 50) {
         if (dx < 0) stepViewer(1);
         else stepViewer(-1);
     }
-}, {passive:true});
+}, {passive: true});
+
+// Block Safari's page pinch-zoom in the viewer and over the grid (we handle pinch there).
+['gesturestart', 'gesturechange', 'gestureend'].forEach(function (evt) {
+    document.addEventListener(evt, function (ev) {
+        const viewerOpen = document.getElementById('viewer').classList.contains('open');
+        const inGrid = ev.target && ev.target.closest && ev.target.closest('#grid');
+        if (viewerOpen || inGrid) ev.preventDefault();
+    }, {passive: false});
+});
 
 function deselectAll() {
     selected.forEach(f => {
@@ -701,6 +1223,18 @@ function deselectAll() {
 }
 
 function downloadSelected() {
+    // A single selection downloads the image itself, not a one-file zip.
+    if (selected.size === 1) {
+        const f = [...selected][0];
+        const a = document.createElement('a');
+        a.href = '/photo/' + encodeURIComponent(f);
+        a.download = f;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return;
+    }
+    const token = Date.now().toString(36) + Math.random().toString(36).slice(2);
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = '/download-zip';
@@ -711,8 +1245,66 @@ function downloadSelected() {
         inp.value = f;
         form.appendChild(inp);
     });
+    const tok = document.createElement('input');
+    tok.type = 'hidden';
+    tok.name = 'download_token';
+    tok.value = token;
+    form.appendChild(tok);
     document.body.appendChild(form);
     form.submit();
+    form.remove();
+    trackDownload(token);
+}
+
+// Poll the Pi for how much of the zip it has streamed, and fill the bottom line.
+// (Reflects bytes the Pi has sent — runs slightly ahead of bytes received.)
+function trackDownload(token) {
+    const started = Date.now();
+    let shown = false, lastSent = -1, lastChange = Date.now();
+    const poll = setInterval(async () => {
+        let total = 0, sent = 0, active = false, ok = false;
+        try {
+            const d = await (await fetch('/download-progress?token=' + token)).json();
+            total = d.total; sent = d.sent; active = !!d.active; ok = true;
+        } catch (e) { /* network blip — keep polling */ }
+        if (sent !== lastSent) { lastSent = sent; lastChange = Date.now(); }
+
+        // Only reveal the bar once the Pi is actually streaming bytes — so a
+        // dismissed Safari download prompt (which never streams) shows nothing.
+        if (total > 0 && sent > 0) {
+            shown = true;
+            showProgress(sent / total);
+        }
+
+        const now = Date.now();
+        const complete = shown && total > 0 && sent >= total;
+        const ended = shown && ok && total > 0 && !active;   // server finished/aborted
+        // No time cap: keep the bar up as long as the Pi reports the stream is
+        // active, however long the download takes.
+        if (complete) {
+            clearInterval(poll);
+            showProgress(1);
+            setTimeout(hideProgress, 400);
+        } else if (ended) {
+            clearInterval(poll);                              // aborted before finishing
+            hideProgress();
+        } else if ((!shown && now - started > 30000) ||      // prompt dismissed
+                   (shown && now - lastChange > 30000)) {     // hard-freeze backstop
+            clearInterval(poll);
+            hideProgress();
+        }
+    }, 250);
+}
+
+function showProgress(frac) {
+    document.getElementById('dl-progress').classList.add('active');
+    document.getElementById('dl-progress-fill').style.width =
+        (Math.max(0, Math.min(1, frac)) * 100) + '%';
+}
+
+function hideProgress() {
+    document.getElementById('dl-progress').classList.remove('active');
+    document.getElementById('dl-progress-fill').style.width = '0';
 }
 
 function confirmDelete() {
@@ -740,16 +1332,16 @@ async function deleteSelected() {
     });
     if (res.ok) {
         filesToDelete.forEach(f => {
-            const el = document.querySelector(`.item[data-file="${f}"]`);
+            const el = itemEls[f];
             if (el) el.remove();
+            delete itemEls[f];
             selected.delete(f);
-            const idx = files.indexOf(f);
-            if (idx !== -1) files.splice(idx, 1);
+            let idx = allFiles.indexOf(f);
+            if (idx !== -1) allFiles.splice(idx, 1);
         });
         document.getElementById('sel-bar').classList.remove('open');
-        const count = document.querySelectorAll('.item').length;
-        document.querySelector('.meta span').textContent =
-            count + ' IMAGE' + (count !== 1 ? 'S' : '');
+        // Rebuild the visible view (also refreshes `files`, count and empty state).
+        applyView();
     }
 }
 
@@ -795,14 +1387,150 @@ document.addEventListener('mouseup', e => {
                 if (!selected.has(f)) { selected.add(f); item.classList.add('sel'); }
             }
         });
-        if (selected.size > 0) {
-            document.getElementById('sel-bar').classList.add('open');
-            document.getElementById('sel-count').textContent = selected.size + ' SELECTED';
-        }
+        refreshSelBar();
     }
     dragStart = null;
     dragMoved = false;
 });
+
+// ── Touch multi-select (mobile/tablet) ──
+// Tap a thumbnail's dot to select it. Once something is selected, glide
+// sideways across thumbnails to "paint" more (a glide started on a dot works
+// in any direction). Plain taps open the viewer; vertical drags still scroll.
+(function () {
+    if (!grid) return;
+    const INTENT = 10;        // px of movement before we decide scroll vs. paint
+    let painting = false;
+    let decided = false;      // have we classified this gesture yet?
+    let paintMode = true;     // true = select swept items, false = deselect
+    let startItem = null;
+    let startOnDot = false;
+    let startX = 0, startY = 0;
+    let suppressClick = false;
+    const handled = new Set();
+
+    function paint(item) {
+        if (!item) return;
+        const f = item.dataset.file;
+        if (handled.has(f)) return;
+        handled.add(f);
+        setItemSelected(item, paintMode);
+        refreshSelBar();
+    }
+
+    function beginPaint() {
+        painting = true;
+        suppressClick = true;          // swallow the click that ends the glide
+        handled.clear();
+        // Glide off an unselected thumb selects the swath; off a selected one
+        // deselects it.
+        paintMode = !startItem.classList.contains('sel');
+        paint(startItem);
+        if (navigator.vibrate) { try { navigator.vibrate(10); } catch (e) {} }
+    }
+
+    grid.addEventListener('touchstart', e => {
+        if (window.innerWidth >= 1200) return;   // desktop uses mouse drag-select
+        if (document.getElementById('viewer').classList.contains('open')) return;
+        painting = false;
+        decided = false;
+        if (e.touches.length > 1) { startItem = null; return; }
+        startItem = e.target.closest('.item');
+        startOnDot = !!e.target.closest('.sel-circle');
+        const t = e.touches[0];
+        startX = t.clientX;
+        startY = t.clientY;
+        handled.clear();
+    }, {passive: true});
+
+    grid.addEventListener('touchmove', e => {
+        if (!startItem) return;
+        const t = e.touches[0];
+        const dx = t.clientX - startX, dy = t.clientY - startY;
+        if (!painting) {
+            if (!decided) {
+                if (Math.abs(dx) < INTENT && Math.abs(dy) < INTENT) return;
+                decided = true;
+                const horizontal = Math.abs(dx) > Math.abs(dy);
+                const selectionMode = selected.size > 0;
+                // Only a sideways glide starts painting — from a dot, or anywhere
+                // once a selection exists. A vertical drag always scrolls, even when
+                // it begins on a dot, so scrolling is never hijacked.
+                if (horizontal && (startOnDot || selectionMode)) {
+                    beginPaint();
+                } else {
+                    startItem = null;      // vertical / not eligible → let it scroll
+                    return;
+                }
+            }
+            if (!painting) return;
+        }
+        e.preventDefault();                // selecting — don't scroll the page
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        paint(el ? el.closest('.item') : null);
+    }, {passive: false});
+
+    function end() {
+        painting = false;
+        decided = false;
+        startItem = null;
+        startOnDot = false;
+        setTimeout(() => { suppressClick = false; }, 350);  // fallback reset
+    }
+    grid.addEventListener('touchend', end);
+    grid.addEventListener('touchcancel', end);
+
+    // Swallow the click that fires right after a paint gesture so it doesn't
+    // double-toggle the start thumbnail.
+    document.addEventListener('click', e => {
+        if (suppressClick) {
+            e.preventDefault();
+            e.stopPropagation();
+            suppressClick = false;
+        }
+    }, true);
+})();
+
+// ── Pinch the grid to change density (mobile only): spread = fewer/larger,
+// pinch = more/smaller columns. Steps through 2 → 3 → 4. ──
+(function () {
+    if (!grid) return;
+    const STEP = 1.25;          // distance ratio that triggers one density step
+    const COLS = ['2', '3', '4'];
+    let pinching = false, baseDist = 0;
+
+    function dist(e) {
+        const a = e.touches[0], b = e.touches[1];
+        return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+    }
+
+    function changeDensity(delta) {   // -1 = fewer columns, +1 = more columns
+        let i = COLS.indexOf(curDensity);
+        if (i === -1) i = 0;
+        const ni = Math.max(0, Math.min(COLS.length - 1, i + delta));
+        if (COLS[ni] !== curDensity) {
+            setDensity(COLS[ni]);
+            if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
+        }
+    }
+
+    grid.addEventListener('touchstart', e => {
+        if (window.innerWidth >= 768) return;   // density is a mobile feature
+        if (e.touches.length === 2) { pinching = true; baseDist = dist(e); }
+    }, {passive: true});
+
+    grid.addEventListener('touchmove', e => {
+        if (!pinching || e.touches.length < 2) return;
+        e.preventDefault();                      // don't scroll/zoom the page
+        const ratio = dist(e) / baseDist;
+        if (ratio > STEP) { changeDensity(-1); baseDist = dist(e); }       // spread → fewer cols
+        else if (ratio < 1 / STEP) { changeDensity(1); baseDist = dist(e); } // pinch → more cols
+    }, {passive: false});
+
+    grid.addEventListener('touchend', e => {
+        if (e.touches.length < 2) pinching = false;
+    }, {passive: true});
+})();
 </script>
 </body>
 </html>"""
@@ -822,12 +1550,21 @@ def get_free_space():
 
 @app.route("/")
 def index():
+    # All media, newest-first. Filtering and ordering happen client-side so
+    # changing a selector never reloads the page.
     files = list_media()
     gif_set = [f for f in files if f.lower().endswith(".gif")]
+    sizes = {}
+    for f in files:
+        try:
+            sizes[f] = os.path.getsize(os.path.join(PHOTOS_DIR, f))
+        except OSError:
+            sizes[f] = 0
     return render_template_string(
-        HTML, files=files, count=len(files),
+        HTML, files=files, count=len(files), has_media=bool(files),
         free_space=get_free_space(),
-        files_json=json.dumps(files), gifs_json=json.dumps(gif_set)
+        files_json=json.dumps(files), gifs_json=json.dumps(gif_set),
+        sizes_json=json.dumps(sizes)
     )
 
 
@@ -955,19 +1692,102 @@ def delete_photos():
 @app.route("/download-zip", methods=["POST"])
 def download_zip():
     filenames = request.form.getlist("files")
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
-        for f in filenames:
-            path = os.path.join(PHOTOS_DIR, f)
-            if os.path.exists(path):
-                zf.write(path, f)
-    buf.seek(0)
+    token = request.form.get("download_token", "")
+    paths = []
+    for f in filenames:
+        base = os.path.basename(f)
+        p = os.path.join(PHOTOS_DIR, base)
+        if os.path.exists(p):
+            paths.append((p, base))
+
+    # Approximate the final ZIP_STORED size as the progress denominator.
+    total = 22
+    for p, arcname in paths:
+        total += 92 + 2 * len(arcname.encode("utf-8")) + os.path.getsize(p)
+
+    if token:
+        now = time.time()
+        for k, v in list(DOWNLOAD_PROGRESS.items()):   # prune old, finished entries
+            if not v.get("active") and now - v["ts"] > 60:
+                DOWNLOAD_PROGRESS.pop(k, None)
+        DOWNLOAD_PROGRESS[token] = {"sent": 0, "total": total, "ts": now, "active": True}
+
+    class _Stream:
+        """Write-only sink. With no seek/tell, zipfile streams using data
+        descriptors, so we never buffer more than one file at a time."""
+        def __init__(self):
+            self.buf = bytearray()
+        def write(self, data):
+            self.buf.extend(data)
+            return len(data)
+        def flush(self):
+            pass
+        def drain(self):
+            data = bytes(self.buf)
+            del self.buf[:]
+            return data
+
+    def generate():
+        sink = _Stream()
+        sent = 0
+        completed = False
+        try:
+            with zipfile.ZipFile(sink, "w", zipfile.ZIP_STORED) as zf:
+                for p, arcname in paths:
+                    zinfo = zipfile.ZipInfo.from_file(p, arcname)
+                    zinfo.compress_type = zipfile.ZIP_STORED
+                    # Copy each file in small chunks so progress updates continuously
+                    # (not in one big jump per file).
+                    with zf.open(zinfo, "w") as dest, open(p, "rb") as src:
+                        while True:
+                            buf = src.read(262144)
+                            if not buf:
+                                break
+                            dest.write(buf)
+                            chunk = sink.drain()
+                            if chunk:
+                                yield chunk
+                                sent += len(chunk)
+                                if token:
+                                    DOWNLOAD_PROGRESS[token] = {"sent": sent, "total": total, "ts": time.time(), "active": True}
+                    chunk = sink.drain()       # data descriptor written when the entry closes
+                    if chunk:
+                        yield chunk
+                        sent += len(chunk)
+                        if token:
+                            DOWNLOAD_PROGRESS[token] = {"sent": sent, "total": total, "ts": time.time(), "active": True}
+            tail = sink.drain()                # central directory, written on close
+            if tail:
+                yield tail
+                sent += len(tail)
+            completed = True
+        finally:
+            # Always mark the stream ended (completed or aborted) so the client
+            # can stop waiting. A completed download reports the full size.
+            if token:
+                DOWNLOAD_PROGRESS[token] = {
+                    "sent": total if completed else sent,
+                    "total": total,
+                    "ts": time.time(),
+                    "active": False,
+                }
+
     return Response(
-        buf.getvalue(),
+        generate(),
         mimetype="application/zip",
         headers={"Content-Disposition": "attachment; filename=optocam_photos.zip"}
     )
 
 
+@app.route("/download-progress")
+def download_progress():
+    p = DOWNLOAD_PROGRESS.get(request.args.get("token", ""))
+    if not p:
+        return Response('{"sent":0,"total":0,"active":false}', mimetype="application/json")
+    return Response(
+        json.dumps({"sent": p["sent"], "total": p["total"], "active": p.get("active", False)}),
+        mimetype="application/json")
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=80, debug=False)
+    app.run(host="0.0.0.0", port=80, debug=False, threaded=True)
