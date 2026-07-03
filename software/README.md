@@ -20,7 +20,7 @@ Download the latest Optocam Zero image (`.img`) from the [releases page](https:/
 
 Download Raspberry Pi Imager from [raspberrypi.com/software](https://www.raspberrypi.com/software/) and install it. Select **Raspberry Pi Zero 2W** as the device. Under **Choose OS**, scroll to the bottom and select **Use custom**, then pick the image file you just downloaded.
 
-Select your SD card under **Choose Storage**, then click **Write**. If asked whether to apply OS customisation settings, choose **No** — the firmware is preconfigured.
+Select your SD card under **Choose Storage**, then click **Write**. If asked whether to apply OS customisation settings, choose **No**.
 
 **3. First boot**
 
