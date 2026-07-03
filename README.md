@@ -23,10 +23,10 @@ I designed Optocam Zero to have a very compact, carry everywhere and have fun so
 <br>
 
 ## Specs
-- **UPDATE** - Boot time is 14s, down from 22s originally.
+- **UPDATE** - Now boots in 5 seconds with the buildroot image.
 - 2592x2592px Jpeg image capture. Image saves in the background while preview stays active.
 - 240x240px 1.4 inch lcd display.
-- Consistent 15–20 fps camera preview on the screen.
+- Consistent 25-30 fps camera preview on the screen.
 - Uses 14500 type li-ion battery.
 - 70–80 minutes of use per charge.
 - Dimensions: 51×71×18mm (excluding camera and screen bump)
