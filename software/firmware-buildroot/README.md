@@ -6,7 +6,7 @@ Python version is kept in [`../python-legacy/`](../python-legacy/).
 ## Contents
 
 - `defconfig/` - Buildroot defconfig for the current firmware image.
-- `src/` - native Optocam app sources plus its `Makefile`.
+- `src/` - native app sources plus its `Makefile`.
 - `package/optocamzero/` - Buildroot package that cross-compiles and installs
   the native app (`optocam_app` and the `optocam_preview` fallback) to
   `/usr/bin`.
