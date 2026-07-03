@@ -1,0 +1,12 @@
+#!/bin/sh
+# Splash on screen ASAP — backgrounded so the camera module loading (S02) is
+# NOT delayed; the splash binary holds the panel until the app takes over.
+[ "$1" = start ] || exit 0
+echo "S01 $(cat /proc/uptime)" >> /tmp/boot-marks
+touch /tmp/splash-claimed
+(
+  modprobe spi-bcm2835
+  modprobe spidev
+  echo "S01 splash-exec $(cat /proc/uptime)" >> /tmp/boot-marks
+  /usr/bin/optocam_splash
+) &

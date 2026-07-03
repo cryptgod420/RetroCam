@@ -1,0 +1,5 @@
+#!/bin/sh
+[ "$1" = start ] || exit 0
+mkdir -p /boot; mount | grep -q ' /boot ' || mount -t vfat /dev/mmcblk0p1 /boot 2>/dev/null
+/usr/bin/optocam_preview > /boot/optocam.log 2>&1 &
+( sleep 18; dmesg > /boot/dmesg_full.txt; sync ) &

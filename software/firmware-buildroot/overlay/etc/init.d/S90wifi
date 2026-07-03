@@ -1,0 +1,150 @@
+#!/bin/sh
+# OptoCam background services — storage and WiFi/SSH in PARALLEL subshells,
+# both fully off the boot-critical path (preview is already live at S03).
+# The first-boot resize2fs can take 30s+ — it must never delay WiFi.
+#
+# WiFi credentials come from Raspberry Pi Imager's OS customization on the FAT
+# boot partition (mounted READ-ONLY): firstrun.sh (old Imager) or custom.toml
+# (Imager 1.8+). SSH: dropbear, root/optocam, host key persisted on /data.
+[ "$1" = start ] || exit 0
+
+# ---- storage + SSH (dropbear key lives on /data) ----
+(
+  # wait until the preview is on screen (flag from the app; 15s fallback)
+  i=0; while [ ! -f /tmp/optocam-preview-up ] && [ $i -lt 150 ]; do sleep 0.1; i=$((i+1)); done
+  sleep 0.2    # get /data ready before an immediate first shutter press
+  P3_END=$(( $(cat /sys/block/mmcblk0/mmcblk0p3/start) + $(cat /sys/block/mmcblk0/mmcblk0p3/size) ))
+  DISK_END=$(cat /sys/block/mmcblk0/size)
+  if [ $((DISK_END - P3_END)) -gt 16384 ]; then      # >8MB unused → one-time expand
+    echo ", +" | sfdisk --force --no-reread -N 3 /dev/mmcblk0 2>/dev/null
+    partx -u -n 3 /dev/mmcblk0 2>/dev/null
+  fi
+  mount -o noatime /dev/mmcblk0p3 /data 2>/dev/null
+  # no RTC: restore last known time so file timestamps stay sane (zip needs >1980)
+  [ -f /data/.clock ] && date -s "$(cat /data/.clock)" >/dev/null 2>&1
+  [ "$(date +%Y)" -lt 2020 ] && date -s "2026-07-01 12:00:00" >/dev/null 2>&1
+  resize2fs /dev/mmcblk0p3 2>/dev/null               # online grow; no-op when sized
+  mkdir -p /data/photos 2>/dev/null
+  touch /tmp/optocam-data-ready 2>/dev/null
+  mkdir -p /data/dropbear 2>/dev/null
+  [ -f /data/dropbear/ed25519 ] || dropbearkey -t ed25519 -f /data/dropbear/ed25519 2>/dev/null
+  dropbear -r /data/dropbear/ed25519 2>/dev/null
+) >/dev/null 2>&1 &
+
+# ---- WiFi ----
+(
+  # wait until the preview is on screen (flag from the app; 15s fallback)
+  i=0; while [ ! -f /tmp/optocam-preview-up ] && [ $i -lt 150 ]; do sleep 0.1; i=$((i+1)); done
+  sleep 2    # keep the brcmfmac firmware load out of the preview's first second
+  modprobe brcmfmac 2>/dev/null    # blacklisted from coldplug; loaded here on purpose
+  i=0
+  while [ ! -d /sys/class/net/wlan0 ] && [ $i -lt 150 ]; do sleep 0.1; i=$((i+1)); done
+  [ -d /sys/class/net/wlan0 ] || exit 0
+
+  CONF=/run/wpa_supplicant.conf
+  mount -t vfat -o ro /dev/mmcblk0p1 /boot 2>/dev/null
+  # hostname first, so the DHCP request carries it (router shows "kumcam")
+  HN=$(sed -n 's/^hostname: *//p' /boot/user-data 2>/dev/null | head -1)
+  [ -n "$HN" ] && hostname "$HN"
+  if [ -f /boot/firstrun.sh ]; then
+    # Imager style A: heredoc'd wpa_supplicant.conf inside firstrun.sh.
+    # Strip ctrl_interface (group "netdev" doesn't exist here — wpa_supplicant
+    # refuses to start on it) and other host-specific lines.
+    sed -n '/wpa_supplicant\.conf/,/EOF/p' /boot/firstrun.sh | sed '1d;$d' \
+      | grep -vE '^cat|^chmod|ctrl_interface|update_config|ap_scan' > "$CONF" 2>/dev/null
+    grep -q 'network=' "$CONF" 2>/dev/null || : > "$CONF"
+    # Imager style B: imager_custom set_wlan 'SSID' 'PSK-or-hash' 'CC'
+    if [ ! -s "$CONF" ]; then
+      LINE=$(grep "set_wlan" /boot/firstrun.sh | head -1)
+      if [ -n "$LINE" ]; then
+        SSID=$(echo "$LINE" | awk -F"'" '{print $2}')
+        PSK=$(echo "$LINE"  | awk -F"'" '{print $4}')
+        CC=$(echo "$LINE"   | awk -F"'" '{print $6}')
+        {
+          [ -n "$CC" ] && echo "country=$CC"
+          echo "network={"
+          echo " ssid=\"$SSID\""
+          if [ ${#PSK} -eq 64 ] && ! echo "$PSK" | grep -q '[^0-9a-fA-F]'; then
+            echo " psk=$PSK"
+          else
+            echo " psk=\"$PSK\""
+          fi
+          echo "}"
+        } > "$CONF"
+      fi
+    fi
+  fi
+  # Imager style C (v1.8+): custom.toml with a [wlan] section
+  if [ ! -s "$CONF" ] && [ -f /boot/custom.toml ]; then
+    toml_get() {   # toml_get <section> <key> — value may contain '=' chars
+      awk -v sec="$1" -v key="$2" '
+        /^\[/ { insec = ($0 == "[" sec "]") }
+        insec && index($0, key) == 1 {
+          v = $0; sub(/^[^=]*= */, "", v); gsub(/^"|"$/, "", v); print v; exit
+        }' /boot/custom.toml
+    }
+    SSID=$(toml_get wlan ssid)
+    PSK=$(toml_get wlan password)
+    ENC=$(toml_get wlan password_encrypted)
+    CC=$(toml_get wlan country)
+    if [ -n "$SSID" ]; then
+      {
+        [ -n "$CC" ] && echo "country=$CC"
+        echo "network={"
+        echo " ssid=\"$SSID\""
+        if [ "$ENC" = "true" ]; then echo " psk=$PSK"; else echo " psk=\"$PSK\""; fi
+        echo "}"
+      } > "$CONF"
+    fi
+  fi
+  # Imager style D: cloud-init network-config (netplan YAML) — the format
+  # this project's Imager actually writes. SSID is the quoted key under
+  # access-points; password may be plaintext or a 64-hex PSK hash.
+  if [ ! -s "$CONF" ] && [ -f /boot/network-config ]; then
+    SSID=$(grep -oE '"[^"]+" *:' /boot/network-config | head -1 | sed 's/" *:$//; s/^"//')
+    PSK=$(sed -n 's/^ *password: *//p' /boot/network-config | head -1 | tr -d '"')
+    if [ -n "$SSID" ] && [ -n "$PSK" ]; then
+      {
+        echo "network={"
+        echo " ssid=\"$SSID\""
+        echo " scan_ssid=1"
+        if [ ${#PSK} -eq 64 ] && ! echo "$PSK" | grep -q '[^0-9a-fA-F]'; then
+          echo " psk=$PSK"
+        else
+          echo " psk=\"$PSK\""
+        fi
+        echo "}"
+      } > "$CONF"
+    fi
+  fi
+  if [ -s "$CONF" ]; then
+    ifconfig wlan0 up 2>/dev/null
+    wpa_supplicant -B -i wlan0 -c "$CONF" 2>/dev/null
+    udhcpc -b -i wlan0 -t 15 -T 2 ${HN:+-x hostname:$HN} 2>/dev/null
+    ( sleep 15; ntpd -q -n -p pool.ntp.org >/dev/null 2>&1 ) &   # real time when online
+    # keepalive: brcmfmac power-save drops idle associations — a gateway ping
+    # every 10s keeps the link alive; also persists the clock every ~10min
+    ( sleep 20
+      GW=$(route -n 2>/dev/null | awk "/^0.0.0.0/{print \$2; exit}")
+      n=0
+      [ -n "$GW" ] && while true; do
+        ping -c1 "$GW" >/dev/null 2>&1; sleep 10
+        n=$((n+1))
+        [ $((n % 60)) -eq 0 ] && date "+%Y-%m-%d %H:%M:%S" > /data/.clock
+      done
+    ) &
+  fi
+
+  # cloud-init user-data extras: hostname + SSH public keys (passwordless login).
+  # /root/.ssh is a baked-in symlink to /data/ssh (rootfs is read-only).
+  if [ -f /boot/user-data ]; then
+    i=0; while ! mount | grep -q ' /data ' && [ $i -lt 300 ]; do sleep 0.2; i=$((i+1)); done
+    if mount | grep -q ' /data '; then
+      mkdir -p /data/ssh 2>/dev/null
+      sed -n 's/^ *- *\(ssh-[a-z0-9-]* .*\)/\1/p' /boot/user-data | sort -u > /data/ssh/authorized_keys
+      chmod 600 /data/ssh/authorized_keys 2>/dev/null
+    fi
+  fi
+  umount /boot 2>/dev/null
+
+) >/dev/null 2>&1 &

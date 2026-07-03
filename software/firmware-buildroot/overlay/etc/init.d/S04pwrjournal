@@ -1,0 +1,45 @@
+#!/bin/sh
+# Persistent power / reboot journal (diagnostic).
+#
+# Why: the board was seen to reset spontaneously with every software reboot path
+# excluded (kernel panic=halt, HW watchdog unarmed, no reboot() caller) — the
+# signature of a power/brownout event. This records, in /data (survives resets):
+#   * a BOOT line each boot, with the firmware throttle bitmask and how long the
+#     PREVIOUS boot lasted (its last heartbeat) — so a reset shows up as a boot
+#     whose predecessor "last seen up=<Ns>" was still climbing.
+#   * a POWER line whenever the undervoltage alarm or throttle bitmask is nonzero.
+#
+# NOTE: get_throttled is read with the `read` builtin, NOT `cat` — busybox cat
+# uses splice/sendfile, which trips a kernel WARN on that specific sysfs file.
+#
+# Launches one detached worker and returns immediately: adds zero boot delay.
+[ "$1" = start ] || exit 0
+
+setsid sh -c '
+  GT=/sys/devices/platform/soc/soc:firmware/get_throttled
+  UA=/sys/class/hwmon/hwmon1/in0_lcrit_alarm
+  J=/data/boot-journal.log
+  STATE=/data/.pwrstate
+
+  # /data is mounted asynchronously by S90wifi; wait for it (off the boot path).
+  i=0; while ! grep -q " /data " /proc/mounts && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+  grep -q " /data " /proc/mounts || exit 0
+
+  prev="(no prior state — first boot or fresh /data)"
+  [ -f "$STATE" ] && { read -r p_up p_thr < "$STATE" 2>/dev/null; prev="prev boot last seen up=${p_up}s throttled=${p_thr}"; }
+  [ -f "$J" ] && { tail -n 300 "$J" > "$J.tmp" 2>/dev/null && mv "$J.tmp" "$J"; }   # cheap rotation
+  thr=0; [ -r "$GT" ] && read -r thr < "$GT" 2>/dev/null
+  echo "$(date "+%Y-%m-%d %H:%M:%S") BOOT throttled=$thr | $prev" >> "$J"
+  echo "0 0" > "$STATE"
+
+  while true; do
+    read up _ < /proc/uptime; up=${up%.*}
+    thr=0; [ -r "$GT" ] && read -r thr < "$GT" 2>/dev/null
+    a=0;   [ -r "$UA" ] && read -r a   < "$UA" 2>/dev/null
+    echo "$up $thr" > "$STATE"
+    if [ "$a" != 0 ] || [ "$thr" != 0 ]; then
+      echo "$(date "+%Y-%m-%d %H:%M:%S") POWER up=${up}s alarm=$a throttled=$thr" >> "$J"
+    fi
+    sleep 10
+  done
+' >/dev/null 2>&1 &

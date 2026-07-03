@@ -1,0 +1,34 @@
+#!/bin/sh
+# Late-boot diagnostic v2: the old version dumped dmesg at ~4s, BEFORE the
+# variable 9-13s imx708 link — so it never saw the delay. This one backgrounds
+# itself, polls for the imx708 media entity, records WHEN it appeared, then
+# dumps the full dmesg + lsmod. Writes camtestN.txt (new file per boot) so
+# several boots can be compared from one SD-card read.
+[ "$1" = start ] || exit 0
+mkdir -p /boot
+mount | grep -q ' /boot ' || mount -t vfat /dev/mmcblk0p1 /boot 2>/dev/null
+(
+  T=""
+  i=0
+  while [ $i -lt 150 ]; do            # up to ~30s at 0.2s steps
+    for m in /dev/media0 /dev/media1 /dev/media2 /dev/media3; do
+      [ -e "$m" ] || continue
+      if media-ctl -d "$m" -p 2>/dev/null | grep -q imx708; then
+        T=$(cut -d' ' -f1 /proc/uptime)
+        break 2
+      fi
+    done
+    i=$((i+1)); sleep 0.2
+  done
+  sleep 2                             # let trailing dmesg lines land
+  N=0; while [ -e /boot/camtest$N.txt ]; do N=$((N+1)); done
+  mount -t debugfs none /sys/kernel/debug 2>/dev/null
+  {
+    echo "### imx708 entity visible at uptime: ${T:-NEVER (waited 30s)}"
+    echo; echo "### deferred probes still pending:"
+    cat /sys/kernel/debug/devices_deferred 2>/dev/null || echo "(debugfs n/a)"
+    echo; echo "### loaded modules:"; lsmod
+    echo; echo "### FULL dmesg:"; dmesg
+  } > /boot/camtest$N.txt 2>&1
+  sync
+) &

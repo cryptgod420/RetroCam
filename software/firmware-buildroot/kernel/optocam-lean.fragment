@@ -1,0 +1,51 @@
+# OptoCam lean-kernel fragment — cut boot-time waste measured in camtest0-2.
+# dwc_otg USB host init costs a fixed 0.93s (1.10-2.03s) for a port the camera
+# never uses; sound/SCSI/iSCSI/NFS just bloat the zImage (slower firmware load)
+# and add initcalls + modules. Camera/mmc/i2c/spi/media stacks untouched.
+
+# USB host (dwc_otg handshake = 0.93s/boot) + USB ethernet that rides on it
+# CONFIG_USB_DWCOTG is not set
+# CONFIG_USB_DWC2 is not set
+# CONFIG_USB_LAN78XX is not set
+# CONFIG_USB_NET_SMSC95XX is not set
+# CONFIG_USB_STORAGE is not set
+
+# Sound (snd_bcm2835 + snd_pcm + snd_timer + snd load on every boot, unused)
+# CONFIG_SOUND is not set
+# CONFIG_SND is not set
+
+# SCSI stack (only needed for USB storage; "Loading iSCSI transport" at 1.10s)
+# CONFIG_SCSI is not set
+# CONFIG_BLK_DEV_SD is not set
+# CONFIG_ISCSI_TCP is not set
+# CONFIG_SCSI_ISCSI_ATTRS is not set
+
+# Network filesystems (NFS/FS-Cache registered at 1.06-1.08s, unused)
+# CONFIG_NFS_FS is not set
+# CONFIG_NFSD is not set
+# CONFIG_FSCACHE is not set
+
+# ---- lean v2: shrink zImage (faster firmware load) + drop unused initcalls ----
+# tracing/profiling infrastructure (ftrace alloc + kprobe optimization at boot)
+# CONFIG_FTRACE is not set
+# CONFIG_KPROBES is not set
+# CONFIG_PROFILING is not set
+# audit netlink subsystem (audit: initializing at 0.018s, unused)
+# CONFIG_AUDIT is not set
+# cgroups (busybox init uses none)
+# CONFIG_CGROUPS is not set
+# netfilter/iptables (built-in =y, fat, unused — plain sockets unaffected)
+# CONFIG_NETFILTER is not set
+# IPv6 + bluetooth off (NET core stays for eudev netlink)
+# CONFIG_IPV6 is not set
+# CONFIG_BT is not set
+# CONFIG_IKCONFIG is not set
+# wireless AS MODULES: never coldplugged (brcmfmac blacklisted), loaded by
+# S90wifi in the background AFTER the preview — zero boot-path cost
+CONFIG_CFG80211=m
+CONFIG_MAC80211=m
+CONFIG_BRCMFMAC=m
+CONFIG_KERNEL_LZ4=y
+# CONFIG_KERNEL_GZIP is not set
+# CONFIG_MODULE_COMPRESS_XZ is not set
+CONFIG_MODULE_COMPRESS_NONE=y

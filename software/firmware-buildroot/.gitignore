@@ -1,0 +1,42 @@
+# Buildroot generated output
+output/
+dl/
+build/
+host/
+staging/
+target/
+images/
+
+# Disk images and archives produced by builds
+*.img
+*.img.gz
+*.sdcard
+*.wic
+*.wic.gz
+*.tar
+*.tar.gz
+*.cpio
+*.cpio.gz
+
+# Binaries and object files
+*.o
+*.a
+*.so
+*.elf
+optocam_app
+
+# Device/runtime state
+*.log
+core
+core.*
+photos/
+dropbear/
+ssh/
+authorized_keys
+known_hosts
+
+# Local/editor files
+.DS_Store
+.claude/
+.vscode/
+.idea/

@@ -43,7 +43,7 @@ sudo apt-get install -y git
 ```
 
 ```
-git clone https://github.com/dorukkumkumoglu/optocamzero.git && sudo bash optocamzero/software/install.sh
+git clone https://github.com/dorukkumkumoglu/optocamzero.git && sudo bash optocamzero/software/python-legacy/install.sh
 ```
 
 Installation takes about 10-15 minutes. The Pi reboots automatically when done and the camera starts immediately.

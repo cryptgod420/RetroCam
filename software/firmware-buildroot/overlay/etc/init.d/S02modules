@@ -1,0 +1,11 @@
+#!/bin/sh
+# Camera stack, non-blocking (a wedged modprobe must never stall init).
+# SPI moved to S01splash. The app waits for the imx708 entity itself.
+[ "$1" = start ] || exit 0
+(
+  modprobe i2c-bcm2835
+  modprobe bcm2835-unicam
+  modprobe bcm2835-isp
+  modprobe imx708
+  modprobe dw9807-vcm
+) &

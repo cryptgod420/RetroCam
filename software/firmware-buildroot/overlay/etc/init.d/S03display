@@ -1,0 +1,33 @@
+#!/bin/sh
+# Supervised app launch: a crash restarts the app within 1s (stuck-on-splash
+# becomes a brief hiccup). Cores dump to /tmp — /data isn't mounted yet during
+# early boot, so a /data core_pattern silently loses early crashes — and get
+# moved to /data with a journal entry once it is mounted, surviving power-offs.
+[ "$1" = start ] || exit 0
+echo "S03 $(cat /proc/uptime)" >> /tmp/boot-marks
+echo "/tmp/core.%e.%p" > /proc/sys/kernel/core_pattern 2>/dev/null
+(
+  ulimit -c unlimited
+  while true; do
+    if [ -x /usr/bin/optocam_app ]; then
+      /usr/bin/optocam_app > /tmp/optocam-boot.log 2>&1
+    else
+      /usr/bin/optocam_preview > /tmp/optocam-boot.log 2>&1
+    fi
+    echo "$(cat /proc/uptime) app exited" >> /tmp/optocam-crashes
+    # a crash may be a corrupted page-cache read of the binary/libs (observed:
+    # single-bit flip in a libstdc++ symbol -> instant exit -> the respawn
+    # reuses the SAME poisoned page and loops forever behind the splash).
+    # Dropping the page cache forces a clean re-read from the SD.
+    echo 1 > /proc/sys/vm/drop_caches 2>/dev/null
+    if grep -q ' /data ' /proc/mounts; then
+      {
+        echo "=== $(date '+%Y-%m-%d %H:%M:%S') uptime $(cut -d' ' -f1 /proc/uptime)s"
+        tail -6 /tmp/optocam-boot.log
+      } >> /data/crash-journal 2>/dev/null
+      mv /tmp/core.* /data/ 2>/dev/null
+      sync
+    fi
+    sleep 1
+  done
+) &

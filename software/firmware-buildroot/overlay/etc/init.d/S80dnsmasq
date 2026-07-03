@@ -1,0 +1,3 @@
+#!/bin/sh
+# OptoCam: dnsmasq is started only by transfer-start.sh, never at boot
+exit 0

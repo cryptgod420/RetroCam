@@ -1,0 +1,49 @@
+# Please note that this is only a sample, we recommend you to change it to fit
+# your needs.
+# You should override this file using BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE.
+# See http://buildroot.org/manual.html#rootfs-custom
+# and http://elinux.org/RPiconfig for a description of config.txt syntax
+
+start_file=start.elf
+fixup_file=fixup.dat
+
+kernel=zImage
+
+# To use an external initramfs file
+#initramfs rootfs.cpio.gz
+
+# Disable overscan assuming the display supports displaying the full resolution
+# If the text shown on the screen disappears off the edge, comment this out
+disable_overscan=1
+
+# How much memory in MB to assign to the GPU on Pi models having
+# 256, 512 or 1024 MB total memory
+gpu_mem_256=100
+gpu_mem_512=100
+gpu_mem_1024=100
+
+# fixes rpi (3B, 3B+, 3A+, 4B ,zero W and zero 2) ttyAMA0 serial console
+# dtoverlay=miniuart-bt (BT off for boot speed)
+
+# enable autoprobing of Bluetooth driver without need of hciattach/btattach
+# dtparam=krnbt=on (BT off)
+
+# ===== OptoCam: camera =====
+camera_auto_detect=0
+dtoverlay=imx708
+
+# ===== OptoCam: boot speed (safe, known-good) =====
+disable_splash=1
+hdmi_blanking=2
+hdmi_ignore_hotplug=1
+arm_freq=1200
+over_voltage=2
+initial_turbo=30
+dtoverlay=disable-bt
+gpio=24=op,dh
+dtparam=spi=on
+dtparam=audio=off
+boot_delay=0
+force_eeprom_read=0
+disable_poe_fan=1
+dtoverlay=cma,cma-128

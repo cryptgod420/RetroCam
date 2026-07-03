@@ -1,0 +1,26 @@
+#!/bin/sh
+# TEMPORARY debug: dump the WiFi bring-up state to the FAT boot partition
+# ~35s after boot. Remove from the overlay for the final power-cut-proof image.
+[ "$1" = start ] || exit 0
+(
+  sleep 25
+  mkdir -p /boot
+  mount | grep -q ' /boot ' || mount -t vfat /dev/mmcblk0p1 /boot 2>/dev/null
+  mount -o remount,rw /boot 2>/dev/null
+  {
+    echo "### uptime:"; cat /proc/uptime
+    echo; echo "### ALL boot partition files:"; ls -la /boot/
+    echo; echo "### candidate config files (passwords redacted):"
+    for f in /boot/custom.toml /boot/user-data /boot/network-config /boot/firstrun.sh; do
+      [ -f "$f" ] && { echo "--- $f:"; sed 's/\(password[^=:]*[=:] *\).*/\1REDACTED/i; s/\(psk[^=:]*[=:] *\).*/\1REDACTED/i' "$f" | head -40; }
+    done
+    echo; echo "### firstrun.sh on boot partition:"; ls -la /boot/firstrun.sh
+    echo; echo "### parsed conf (psk redacted):"; sed 's/psk=.*/psk=REDACTED/' /run/wpa_supplicant.conf
+    echo; echo "### loaded modules:"; lsmod
+    echo; echo "### interfaces:"; ifconfig -a
+    echo; echo "### processes:"; ps w | grep -E "wpa|udhcpc|dropbear" | grep -v grep
+    echo; echo "### /data:"; mount | grep data; df -h /data
+    echo; echo "### dmesg (wifi/sdio):"; dmesg | grep -iE "brcm|wlan|cfg80211|ieee80211|mmc1" | tail -30
+  } > /boot/wifidebug.txt 2>&1
+  sync
+) &
