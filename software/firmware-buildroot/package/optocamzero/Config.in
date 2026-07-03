@@ -1,5 +1,5 @@
-config BR2_PACKAGE_OPTOCAM
-	bool "optocam"
+config BR2_PACKAGE_OPTOCAMZERO
+	bool "optocamzero"
 	depends on BR2_INSTALL_LIBSTDCPP
 	depends on BR2_TOOLCHAIN_HAS_THREADS
 	depends on BR2_PACKAGE_LIBCAMERA
@@ -13,6 +13,6 @@ config BR2_PACKAGE_OPTOCAM
 
 	  https://github.com/dorukkumkumoglu/optocamzero
 
-comment "optocam needs libcamera and a toolchain w/ C++, threads"
+comment "optocamzero needs libcamera and a toolchain w/ C++, threads"
 	depends on !BR2_INSTALL_LIBSTDCPP || !BR2_TOOLCHAIN_HAS_THREADS || \
 		!BR2_PACKAGE_LIBCAMERA

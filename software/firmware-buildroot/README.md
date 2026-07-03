@@ -7,8 +7,9 @@ Python version is kept in [`../python-legacy/`](../python-legacy/).
 
 - `defconfig/` - Buildroot defconfig for the current firmware image.
 - `src/` - native Optocam app sources plus its `Makefile`.
-- `package/optocam/` - Buildroot package that cross-compiles and installs the
-  native app (`optocam_app` and the `optocam_preview` fallback) to `/usr/bin`.
+- `package/optocamzero/` - Buildroot package that cross-compiles and installs
+  the native app (`optocam_app` and the `optocam_preview` fallback) to
+  `/usr/bin`.
 - `config/` - Raspberry Pi boot, genimage, BusyBox, and board scripts.
 - `kernel/` - kernel config fragments.
 - `overlay/` - root filesystem overlay.
@@ -22,8 +23,8 @@ paths, so copy each file to the location below:
 | This repo | Buildroot checkout |
 | --- | --- |
 | `defconfig/optocam_zero_buildroot_defconfig` | `configs/` |
-| `package/optocam/` | `package/optocam/` |
-| `src/` (incl. `Makefile`) | `package/optocam/src/` |
+| `package/optocamzero/` | `package/optocamzero/` |
+| `src/` (incl. `Makefile`) | `package/optocamzero/src/` |
 | `overlay/` | `board/raspberrypi/overlay/` |
 | `kernel/*.fragment` | `board/raspberrypi/` |
 | `config/busybox.fragment` | `board/raspberrypi/` |
@@ -34,7 +35,7 @@ Register the package by adding one line to Buildroot's `package/Config.in`
 (e.g. under the "Hardware handling" or "Miscellaneous" menu):
 
 ```
-source "package/optocam/Config.in"
+source "package/optocamzero/Config.in"
 ```
 
 Then build:
@@ -44,7 +45,7 @@ make optocam_zero_buildroot_defconfig
 make
 ```
 
-This produces `output/images/sdcard.img`. The `optocam` package compiles the
+This produces `output/images/sdcard.img`. The `optocamzero` package compiles the
 native app against the target's libcamera, libjpeg, and freetype and installs
 `/usr/bin/optocam_app` and `/usr/bin/optocam_preview`.
 
