@@ -177,7 +177,7 @@ class CameraConfigCache:
             )
         return self.gif_config
 config_cache = None
-FONT_PATH = "/home/dkumkum/cmunvt.ttf"
+FONT_PATH = "/home/pi/cmunvt.ttf"
 
 # Shadow cache for preview overlays — only regenerated when value changes
 _shadow_cache = {}
@@ -755,7 +755,7 @@ def init_display():
         (0xC1, [0x10]),                        # Power control 2
         (0xC5, [0x3E, 0x28]),                  # VCOM control 1
         (0xC7, [0x86]),                        # VCOM control 2
-        (0x36, [0x08]),                        # Memory access control (MADCTL)
+        (0x36, [0x48]),                        # Memory access control (MADCTL)
         (0x3A, [0x55]),                        # Pixel format: 16bpp/RGB565
         (0xB1, [0x00, 0x18]),                  # Frame rate control
         (0xB6, [0x08, 0x82, 0x27]),            # Display function control
@@ -825,7 +825,7 @@ def overlay_capture_dot(base_image):
     return Image.fromarray(img_array)
 def show_splash():
     """Display pre-converted RGB565 splash image directly to display"""
-    splash_path = "/home/dkumkum/splash.raw"
+    splash_path = "/home/pi/splash.raw"
     if not os.path.exists(splash_path):
         return
     with open(splash_path, "rb") as f:
@@ -903,7 +903,7 @@ def show_transfer_mode_screen():
 
     display_image(img)
 
-GALLERY_DIR = "/home/dkumkum/photos"
+GALLERY_DIR = "/home/pi/photos"
 
 _capture_counter = None
 _capture_counter_lock = threading.Lock()
