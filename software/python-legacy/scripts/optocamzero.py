@@ -162,8 +162,7 @@ def make_text_shadow(text, x, y, font):
     ImageDraw.Draw(shadow).text((x, y), text, font=font, fill=(0, 0, 0, 250))
     return shadow.filter(ImageFilter.GaussianBlur(radius=4))
 
-_STANDARD_ISO = [100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600]
-
+# ── Camera Control Definitions ──
 AWB_MODES = [
     (1, "Tungsten",    "TNG"),
     (2, "Fluorescent", "FLR"),
@@ -171,7 +170,12 @@ AWB_MODES = [
     (4, "Daylight",    "DAY"),
     (5, "Cloudy",      "CLD"),
 ]
+EV_VALUES = [-4.0, -3.0, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0]
+ISO_VALUES = [0, 100, 200, 400, 800, 1600]
+SHUTTER_VALUES = [0, 125000, 66667, 33333, 16667, 8000, 4000, 2000, 1000]
+SHUTTER_LABELS = ["S Auto", "1/8", "1/15", "1/30", "1/60", "1/125", "1/250", "1/500", "1/1000"]
 
+_STANDARD_ISO = [100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600]
 _STANDARD_SHUTTERS = [
     (125, "1/8000"), (156, "1/6400"), (200, "1/5000"), (250, "1/4000"),
     (313, "1/3200"), (400, "1/2500"), (500, "1/2000"), (625, "1/1600"),
@@ -190,6 +194,36 @@ def nearest_standard_iso(gain):
 
 def nearest_standard_shutter(exp_us):
     return min(_STANDARD_SHUTTERS, key=lambda s: abs(s[0] - exp_us))[1]
+
+# Global States
+active_setting_index = 0  # 0:AWB, 1:EV, 2:ISO, 3:Shutter
+ev_index = 6
+iso_index = 0
+shutter_index = 0
+
+def get_camera_controls():
+    global active_setting_index, ev_index, iso_index, shutter_index, awb_mode_index, filter_index
+    ctrls = _FILM_ISP[FILTERS[filter_index]].copy()
+    ctrls["AwbMode"] = AWB_MODES[awb_mode_index][0]
+    
+    is_manual_iso = (ISO_VALUES[iso_index] != 0)
+    is_manual_shutter = (SHUTTER_VALUES[shutter_index] != 0)
+
+    if is_manual_iso and is_manual_shutter:
+        # STRICT MANUAL PRIORITY: Lock out auto-exposure completely.
+        ctrls["AeEnable"] = False
+        ctrls["AnalogueGain"] = ISO_VALUES[iso_index] / 100.0
+        ctrls["ExposureTime"] = SHUTTER_VALUES[shutter_index]
+    else:
+        # SEMI-AUTO: EV acts as a dynamic offset target for whatever is left on Auto.
+        ctrls["AeEnable"] = True
+        ctrls["ExposureValue"] = EV_VALUES[ev_index]
+        if is_manual_iso:
+            ctrls["AnalogueGain"] = ISO_VALUES[iso_index] / 100.0
+        if is_manual_shutter:
+            ctrls["ExposureTime"] = SHUTTER_VALUES[shutter_index]
+            
+    return ctrls
 
 def get_cached_shadow(key, text, x, y, font):
     if _shadow_cache.get(key) != text:
@@ -694,17 +728,7 @@ def display_image(image):
     with display_lock:
         _set_window(0, 0, PANEL_WIDTH - 1, PANEL_HEIGHT - 1)
         send_data(convert_to_rgb565(image))
-def overlay_capture_dot(base_image):
-    img_array = np.array(base_image)
-    dot_center = (300, 20)
-    dot_radius = 8
-    y, x = np.ogrid[:240, :320]
-    mask = (x - dot_center[0])**2 + (y - dot_center[1])**2 <= dot_radius**2
-    img_array[mask] = [0, 255, 0]
-    border = ((x - dot_center[0])**2 + (y - dot_center[1])**2 <= (dot_radius+1)**2) & \
-             ((x - dot_center[0])**2 + (y - dot_center[1])**2 > (dot_radius-1)**2)
-    img_array[border] = [255, 255, 255]
-    return Image.fromarray(img_array)
+
 def show_splash():
     splash_path = "/home/pi/splash.raw"
     if not os.path.exists(splash_path):
@@ -756,16 +780,12 @@ def show_transfer_mode_screen():
         draw.text((count_x, count_y), count_str, font=font_title, fill=dot_color)
 
     draw.line([(8, 45), (312, 45)], fill=(40, 40, 40), width=1)
-
     draw.text((20, 55),  "WiFi",         font=font_label, fill=(100, 100, 100))
     draw.text((20, 73),  "Optocam Zero", font=font_value, fill=(255, 255, 255))
-
     draw.text((20, 103),  "Password",     font=font_label, fill=(100, 100, 100))
     draw.text((20, 121), "0026opto",     font=font_value, fill=(255, 255, 255))
-
     draw.text((20, 151), "Browser",      font=font_label, fill=(100, 100, 100))
     draw.text((20, 169), "192.168.4.1",  font=font_value, fill=(255, 255, 255))
-
     draw.line([(8, 195), (312, 195)], fill=(40, 40, 40), width=1)
 
     hint = "Hold center to exit"
@@ -1011,6 +1031,7 @@ def capture_full_res(picam2):
 
             picam2.configure(config_cache.get_capture_config())
             picam2.start()
+            picam2.set_controls(get_camera_controls())
             time.sleep(0.15)
 
             for attempt in range(2):
@@ -1033,7 +1054,6 @@ def capture_full_res(picam2):
                 print("✗ Capture failed")
                 return None
 
-            # MIRRORED AND NO LONGER ROTATED FOR LANDSCAPE
             captured_image = captured_image.transpose(Image.FLIP_LEFT_RIGHT)
 
         capturing = False
@@ -1120,9 +1140,7 @@ def _get_rec_number_layer(num):
 def _draw_rec_overlay(image, count, age=1.0):
     from PIL import ImageDraw
     img = image.convert("RGBA")
-
     ImageDraw.Draw(img).rectangle([0, 0, 319, 239], outline=(235, 45, 45), width=3) 
-
     layer = _get_rec_number_layer(str(count))
     if age < 0.13:
         t = age / 0.13
@@ -1164,8 +1182,7 @@ def record_gif(picam2):
                 time.sleep(0.05)
             picam2.configure(config_cache.get_gif_config())
             picam2.start()
-            picam2.set_controls({**_FILM_ISP[film_name],
-                                 "AwbMode": AWB_MODES[awb_mode_index][0]})
+            picam2.set_controls(get_camera_controls())
             time.sleep(0.15)
 
             rec_label = None
@@ -1249,6 +1266,14 @@ def record_gif(picam2):
         gif_cancel_requested = False
         camera_started = False
 
+def draw_pill_outline(draw_obj, x, y, bbox):
+    pad_x, pad_y = 6, 4
+    x0 = x + bbox[0] - pad_x
+    y0 = y + bbox[1] - pad_y
+    x1 = x + bbox[2] + pad_x
+    y1 = y + bbox[3] + pad_y
+    draw_obj.rounded_rectangle([x0, y0, x1, y1], radius=6, outline=(255, 255, 255, 180), width=2)
+
 def button_handler():
     global preview_active, capture_requested, exit_requested
     global gallery_active, gallery_index, gallery_images, gallery_needs_update, gallery_confirm_delete, gallery_empty_message_time
@@ -1257,9 +1282,9 @@ def button_handler():
     global transfer_mode, transfer_screen_shown, _transfer_last_activity, _transfer_dimmed
     global _idle_last_activity, _idle_dimmed
     global gif_mode, gif_record_requested, gif_mode_label_time, gif_cancel_requested
+    global active_setting_index, ev_index, iso_index, shutter_index
 
     last_capture = 0
-    last_preview = 0
     last_joy_press = 0
     last_joy_up = 0
     last_joy_down = 0
@@ -1269,6 +1294,11 @@ def button_handler():
     cap_down_time = 0
     cap_long_fired = False
     CAP_LONG_THRESHOLD = 0.6
+    
+    prev_was_down = False
+    prev_down_time = 0
+    prev_long_fired = False
+    PREV_LONG_THRESHOLD = 0.6
 
     left_held_since = 0
     right_held_since = 0
@@ -1372,12 +1402,10 @@ def button_handler():
                         print(f"Filter: {FILTERS[filter_index]}")
 
             joy_is_down = not GPIO.input(BUTTON_PRESS)
-
             if joy_is_down and not joy_press_was_down:
                 joy_press_down_time = now
                 joy_long_press_fired = False
                 joy_press_was_down = True
-
             elif joy_is_down and joy_press_was_down:
                 if not joy_long_press_fired and now - joy_press_down_time >= 1.5:
                     joy_long_press_fired = True
@@ -1403,7 +1431,6 @@ def button_handler():
                         _idle_dimmed = False
                         subprocess.Popen(["sudo", "systemctl", "stop", "optocam-hotspot.service"])
                         subprocess.Popen(["sudo", "systemctl", "stop", "optocam-gallery.service"])
-
             elif not joy_is_down and joy_press_was_down:
                 joy_press_was_down = False
                 if not joy_long_press_fired and now - joy_press_down_time > 0.02:
@@ -1441,6 +1468,34 @@ def button_handler():
             if transfer_mode:
                 time.sleep(0.05)
                 continue
+                
+            # WAKE/TOGGLE LOGIC FOR PREVIEW BUTTON
+            prev_is_down = not GPIO.input(BUTTON_PREVIEW)
+            if prev_is_down and not prev_was_down:
+                prev_was_down = True
+                prev_down_time = now
+                prev_long_fired = False
+                # Wake Up Check
+                if not preview_active and not gallery_active and not transfer_mode:
+                    preview_active = True
+                    prev_long_fired = True
+                    isp_changed = True
+                    print("👁 WAKE UP (PREV)")
+            elif prev_is_down and prev_was_down:
+                if not prev_long_fired and (now - prev_down_time >= PREV_LONG_THRESHOLD):
+                    prev_long_fired = True
+                    if preview_active:
+                        preview_active = False
+                        print("👁 DISPLAY OFF")
+            elif not prev_is_down and prev_was_down:
+                prev_was_down = False
+                if not prev_long_fired:
+                    if gallery_active and gallery_confirm_delete:
+                        gallery_confirm_delete = False
+                        gallery_needs_update = True
+                    elif preview_active and not capturing:
+                        active_setting_index = (active_setting_index + 1) % 4
+                        print(f"UI Toggle state: {active_setting_index}")
 
             cap_is_down = not GPIO.input(BUTTON_CAPTURE)
 
@@ -1456,6 +1511,12 @@ def button_handler():
                 cap_was_down = True
                 cap_down_time = now
                 cap_long_fired = False
+                # Wake Up Check
+                if not preview_active and not gallery_active and not transfer_mode:
+                    preview_active = True
+                    cap_long_fired = True 
+                    isp_changed = True
+                    print("👁 WAKE UP (CAP)")
 
             elif cap_is_down and cap_was_down:
                 if (not cap_long_fired and now - cap_down_time >= CAP_LONG_THRESHOLD
@@ -1502,17 +1563,6 @@ def button_handler():
                                 capture_requested = True
                                 print("📸 CAPTURE")
 
-            if not GPIO.input(BUTTON_PREVIEW):
-                if now - last_preview > debounce:
-                    if gallery_active and gallery_confirm_delete:
-                        gallery_confirm_delete = False
-                        gallery_needs_update = True
-                        last_preview = now
-                    elif not gallery_active:
-                        preview_active = not preview_active
-                        last_preview = now
-                        print(f"👁 {'ON' if preview_active else 'OFF'}")
-
             if gallery_active and gallery_images:
                 left_pressed = not GPIO.input(BUTTON_LEFT)
                 right_pressed = not GPIO.input(BUTTON_RIGHT)
@@ -1554,20 +1604,36 @@ def button_handler():
                     right_held_since = 0
 
             elif preview_active and not capturing:
+                # Setting Adjustments (Left/Right)
                 if not GPIO.input(BUTTON_LEFT):
                     if now - last_scroll_time > debounce:
                         last_scroll_time = now
-                        awb_mode_index = (awb_mode_index - 1) % len(AWB_MODES)
-                        awb_mode_changed = True
-                        awb_changed_time = now
-                        print(f"AWB: {AWB_MODES[awb_mode_index][1]}")
+                        if active_setting_index == 0: # AWB
+                            awb_mode_index = (awb_mode_index - 1) % len(AWB_MODES)
+                            awb_mode_changed = True
+                            awb_changed_time = now
+                        elif active_setting_index == 1: # EV
+                            ev_index = max(0, ev_index - 1)
+                        elif active_setting_index == 2: # ISO
+                            iso_index = max(0, iso_index - 1)
+                        elif active_setting_index == 3: # Shutter
+                            shutter_index = max(0, shutter_index - 1)
+                        isp_changed = True
+
                 if not GPIO.input(BUTTON_RIGHT):
                     if now - last_scroll_time > debounce:
                         last_scroll_time = now
-                        awb_mode_index = (awb_mode_index + 1) % len(AWB_MODES)
-                        awb_mode_changed = True
-                        awb_changed_time = now
-                        print(f"AWB: {AWB_MODES[awb_mode_index][1]}")
+                        if active_setting_index == 0: # AWB
+                            awb_mode_index = (awb_mode_index + 1) % len(AWB_MODES)
+                            awb_mode_changed = True
+                            awb_changed_time = now
+                        elif active_setting_index == 1: # EV
+                            ev_index = min(len(EV_VALUES)-1, ev_index + 1)
+                        elif active_setting_index == 2: # ISO
+                            iso_index = min(len(ISO_VALUES)-1, iso_index + 1)
+                        elif active_setting_index == 3: # Shutter
+                            shutter_index = min(len(SHUTTER_VALUES)-1, shutter_index + 1)
+                        isp_changed = True
 
             time.sleep(0.02)
 
@@ -1591,7 +1657,6 @@ gallery_confirm_delete = False
 gallery_empty_message_time = 0
 no_space_message_time = 0
 splash_active = False
-awb_mode_index = AWB_MODES.index(next(m for m in AWB_MODES if m[1] == "Daylight"))
 awb_mode_changed = False
 awb_changed_time = 0
 _awb_last_label = None     
@@ -1624,7 +1689,7 @@ def main():
     global preview_active, capture_requested, exit_requested, camera_started
     global capturing, capture_dot_time, config_cache
     global gallery_active, gallery_index, gallery_images, gallery_needs_update, gallery_confirm_delete, gallery_empty_message_time
-    global awb_mode_index, awb_mode_changed, awb_changed_time, no_space_message_time, splash_active
+    global awb_mode_changed, awb_changed_time, no_space_message_time, splash_active
     global _awb_last_label, _awb_pop_start
     global filter_index, filter_label_time, isp_changed, saving_active
     global transfer_mode, transfer_screen_shown, _transfer_last_refresh, _transfer_last_activity, _transfer_dimmed
@@ -1632,6 +1697,10 @@ def main():
     global first_preview_frame_pending, cold_start_pending
     global gif_mode, gif_record_requested, gif_recording, gif_mode_label_time
     global _gif_anim_frames, _gif_anim_index, _gif_anim_last, _gif_anim_file
+    global awb_mode_index, ev_index, iso_index, shutter_index, active_setting_index
+
+    # Initialize AWB Index safely
+    awb_mode_index = AWB_MODES.index(next(m for m in AWB_MODES if m[1] == "Daylight"))
 
     gc.disable()
 
@@ -1667,13 +1736,14 @@ def main():
     print("FEATURES:")
     print("✓ Enhanced black levels")
     print("✓ LANDSCAPE 4:3 PREVIEW ENABLED")
-    print("✓ FAST capture (1.5-2s freeze)")
-    print("✓ Robust verification (no 0 KB files)")
-    print("✓ Auto-delete corrupted files")
-    print(f"✓ KEY1 (GPIO {BUTTON_CAPTURE}): Capture / Close gallery")
-    print(f"✓ KEY2 (GPIO {BUTTON_PREVIEW}): Toggle preview")
-    print(f"✓ Center button: Open/close gallery")
-    print(f"✓ Left/Right buttons: Navigate gallery")
+    print("✓ LIVE EV/ISO/SHUTTER CONTROLS")
+    print("✓ REAL-TIME AUTO METADATA METERING")
+    print("✓ STRICT MANUAL HIERARCHY LOGIC")
+    print(f"✓ KEY1 (GPIO {BUTTON_CAPTURE}): Capture / Wake Display")
+    print(f"✓ KEY2 (GPIO {BUTTON_PREVIEW}): Tap=Cycle Setting, Hold=Display ON/OFF")
+    print(f"✓ Center button: Hold = Transfer Mode, Tap = Splash")
+    print(f"✓ Left/Right buttons: Adjust highlighted setting")
+    print(f"✓ Up/Down buttons: Cycle film filters")
     print("=" * 50 + "\n")
 
     button_thread = threading.Thread(target=button_handler, daemon=True)
@@ -1821,18 +1891,17 @@ def main():
                     try:
                         with camera_lock:
                             if camera_started and not capturing:
-                                if awb_mode_changed:
-                                    awb_mode_changed = False
-                                    picam2.set_controls({"AwbMode": AWB_MODES[awb_mode_index][0]})
-                                if isp_changed:
+                                if isp_changed or awb_mode_changed:
                                     isp_changed = False
-                                    picam2.set_controls(_FILM_ISP[FILTERS[filter_index]])
+                                    awb_mode_changed = False
+                                    picam2.set_controls(get_camera_controls())
+                                    
                                 req = picam2.capture_request()
                                 preview_image = req.make_image("main")
                                 metadata = req.get_metadata()
                                 req.release()
                                 
-                                # MIRRORED AND NO LONGER ROTATED FOR LANDSCAPE
+                                # MIRRORED FOR LANDSCAPE
                                 preview_image = preview_image.transpose(Image.FLIP_LEFT_RIGHT)
                                 
                                 if first_preview_frame_pending and cold_start_pending:
@@ -1852,38 +1921,49 @@ def main():
                                     capture_dot_time = 0
 
                                 from PIL import ImageDraw
-                                font_hud = load_font(25)
+                                font_hud = load_font(20) # HUD Text is 20% smaller
                                 font_awb_full  = load_font(25)
                                 font_awb_abbr  = load_font(24)
                                 tmp_draw = ImageDraw.Draw(preview_image)
 
-                                iso_val = str(nearest_standard_iso(metadata.get("AnalogueGain", 1.0)))
-                                exp = metadata.get("ExposureTime", 10000)
-                                shutter_val = nearest_standard_shutter(exp) if exp > 0 else "?"
+                                # Pull real-time data to show exact live numbers in Auto Mode
+                                rt_iso = nearest_standard_iso(metadata.get("AnalogueGain", 1.0))
+                                rt_exp = metadata.get("ExposureTime", 10000)
+                                rt_shutter = nearest_standard_shutter(rt_exp) if rt_exp > 0 else "?"
+
                                 awb_switching = time.time() - awb_changed_time < 1.0
                                 awb_label = (AWB_MODES[awb_mode_index][1] if awb_switching
                                              else AWB_MODES[awb_mode_index][2])
+                                             
+                                is_manual_iso = (ISO_VALUES[iso_index] != 0)
+                                is_manual_shutter = (SHUTTER_VALUES[shutter_index] != 0)
+                                is_full_manual = is_manual_iso and is_manual_shutter
+
+                                iso_label = f"ISO {ISO_VALUES[iso_index]}" if is_manual_iso else f"ISO {rt_iso} (A)"
+                                shutter_label = SHUTTER_LABELS[shutter_index] if is_manual_shutter else f"{rt_shutter} (A)"
+                                ev_label = "EV [ M ]" if is_full_manual else f"EV {EV_VALUES[ev_index]:+.1f}"
+
                                 font_awb = font_awb_full if awb_switching else font_awb_abbr
+                                awb_font_size = 25 if awb_switching else 24
 
                                 b_awb = tmp_draw.textbbox((0, 0), awb_label, font=font_awb)
-                                ax = 15
-                                ay = 15 - b_awb[1]
+                                b_iso = tmp_draw.textbbox((0, 0), iso_label, font=font_hud)
+                                b_ev = tmp_draw.textbbox((0, 0), ev_label, font=font_hud)
+                                b_sh = tmp_draw.textbbox((0, 0), shutter_label, font=font_hud)
+
+                                ax, ay = 15, 15 - b_awb[1]
+                                ix = 15
+                                ex = 15
+                                ey = 120 - (b_ev[3] - b_ev[1]) // 2  # Left Border & Vertically Centered
+                                sx = 320 - 15 - (b_sh[2] - b_sh[0])
+
+                                hud_bottom_y = 240 - 15 - max(b_iso[3] - b_iso[1], b_sh[3] - b_sh[1]) 
+                                iy = sy = hud_bottom_y
 
                                 if awb_label != _awb_last_label:
                                     _awb_last_label = awb_label
                                     _awb_pop_start = time.time()
                                 awb_popping = time.time() - _awb_pop_start < AWB_POP_DUR
-                                awb_font_size = 25 if awb_switching else 24
-
-                                b_iso = tmp_draw.textbbox((0, 0), iso_val, font=font_hud)
-                                ix = 15
-
-                                b_sh = tmp_draw.textbbox((0, 0), shutter_val, font=font_hud)
-                                sx = 320 - 15 - (b_sh[2] - b_sh[0])
-
-                                hud_bottom_y = 240 - 15 - max(b_iso[3] - b_iso[1], b_sh[3] - b_sh[1]) 
-                                iy = hud_bottom_y
-                                sy = hud_bottom_y
 
                                 centre_msg = None
                                 centre_msg_start = 0.0
@@ -1914,25 +1994,29 @@ def main():
                                     gif_mode_label_time = 0
 
                                 gif_phase_mod = (int(time.time() * _GIF_PILL_MARCH_HZ) % _GIF_PILL_PHASES) if gif_mode else -1
-
                                 pill_popping = (filter_label_time > 0
                                                 and time.time() - filter_label_time < PILL_POP_DUR)
 
-                                hud_key = (awb_label, iso_val, shutter_val,
-                                           FILTERS[filter_index], gif_phase_mod, pill_popping, awb_popping)
+                                hud_key = (awb_label, iso_label, ev_label, shutter_label,
+                                           FILTERS[filter_index], gif_phase_mod, pill_popping, awb_popping, active_setting_index)
+                                           
                                 if _hud_overlay_cache["key"] == hud_key:
                                     overlay = _hud_overlay_cache["img"]
                                 else:
-                                    iso_shadow = get_cached_shadow("iso", iso_val, ix, iy, font_hud)
-                                    sh_shadow = get_cached_shadow("shutter", shutter_val, sx, sy, font_hud)
-                                    overlay = Image.alpha_composite(iso_shadow, sh_shadow)
+                                    awb_sh = get_cached_shadow("awb", awb_label, ax, ay, font_awb)
+                                    iso_sh = get_cached_shadow("iso", iso_label, ix, iy, font_hud)
+                                    ev_sh = get_cached_shadow("ev", ev_label, ex, ey, font_hud)
+                                    sh_sh = get_cached_shadow("shutter", shutter_label, sx, sy, font_hud)
+                                    
+                                    overlay = Image.alpha_composite(iso_sh, sh_sh)
+                                    overlay = Image.alpha_composite(overlay, ev_sh)
                                     if not awb_popping:
-                                        overlay = Image.alpha_composite(
-                                            overlay, get_cached_shadow("awb", awb_label, ax, ay, font_awb))
+                                        overlay = Image.alpha_composite(overlay, awb_sh)
                                     if not pill_popping:
                                         overlay = Image.alpha_composite(overlay, get_filter_indicator(FILTERS[filter_index]))
                                     if gif_mode:
                                         overlay = Image.alpha_composite(overlay, get_gif_mode_indicator(gif_phase_mod))
+                                    
                                     _hud_overlay_cache["key"] = hud_key
                                     _hud_overlay_cache["img"] = overlay
 
@@ -1943,8 +2027,19 @@ def main():
                                 draw_hud = ImageDraw.Draw(preview_image)
                                 if not awb_popping:
                                     draw_hud.text((ax, ay), awb_label, font=font_awb, fill=(255, 255, 255))
-                                draw_hud.text((ix, iy), iso_val, font=font_hud, fill=(255, 255, 255))
-                                draw_hud.text((sx, sy), shutter_val, font=font_hud, fill=(255, 255, 255))
+                                draw_hud.text((ix, iy), iso_label, font=font_hud, fill=(255, 255, 255))
+                                draw_hud.text((ex, ey), ev_label, font=font_hud, fill=(255, 255, 255))
+                                draw_hud.text((sx, sy), shutter_label, font=font_hud, fill=(255, 255, 255))
+
+                                # Draw pill outline over active setting
+                                if active_setting_index == 0 and not awb_popping:
+                                    draw_pill_outline(draw_hud, ax, ay, b_awb)
+                                elif active_setting_index == 1:
+                                    draw_pill_outline(draw_hud, ex, ey, b_ev)
+                                elif active_setting_index == 2:
+                                    draw_pill_outline(draw_hud, ix, iy, b_iso)
+                                elif active_setting_index == 3:
+                                    draw_pill_outline(draw_hud, sx, sy, b_sh)
 
                                 if saving_active > 0:
                                     sp_r  = 7
