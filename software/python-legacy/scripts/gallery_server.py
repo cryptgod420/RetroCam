@@ -870,7 +870,9 @@ body:has(#sel-bar.open) #dl-progress {
 </div>
 
 <!-- Footer -->
-<footer style="text-align:center; padding: 28px 0 20px; font-size:11px; color:#444; letter-spacing:1px;">Doruk Kumkumo&#287;lu 2026</footer>
+<footer style="text-align:center; padding: 28px 0 20px; font-size:11px; color:#444; letter-spacing:1px;">
+  cryptgod420 2026 | <a href="https://github.com/cryptgod420/RetroCam" style="color:#666; text-decoration:none;">GitHub</a>
+</footer>
 
 <!-- Drag selection box -->
 <div id="drag-select"></div>
