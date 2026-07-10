@@ -151,7 +151,7 @@ class CameraConfigCache:
         return self.gif_config
 
 config_cache = None
-FONT_PATH = os.path.expanduser("~/retrocam.otf")
+FONT_PATH = "/home/dkumkum/retrocam.otf"
 
 _shadow_cache = {}
 _hud_overlay_cache = {"key": None, "img": None}
@@ -730,7 +730,7 @@ def display_image(image):
         send_data(convert_to_rgb565(image))
 
 def show_splash():
-    splash_path = os.path.expanduser("~/splash.raw")
+    splash_path = "/home/dkumkum/splash.raw"
     if not os.path.exists(splash_path):
         return
     with open(splash_path, "rb") as f:
@@ -796,7 +796,7 @@ def show_transfer_mode_screen():
 
     display_image(img)
 
-GALLERY_DIR = os.path.expanduser("~/photos")
+GALLERY_DIR = "/home/dkumkum/photos"
 
 _capture_counter = None
 _capture_counter_lock = threading.Lock()

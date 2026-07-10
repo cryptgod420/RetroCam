@@ -8,7 +8,7 @@ import zipfile
 import tempfile
 from flask import Flask, send_from_directory, render_template_string, Response, request
 
-PHOTOS_DIR = os.path.expanduser("~/photos")
+PHOTOS_DIR = "/home/dkumkum/photos"
 
 MEDIA_EXTS = (".jpg", ".gif")
 
@@ -1754,7 +1754,7 @@ document.addEventListener('mouseup', e => {
 
 def get_free_space():
     try:
-        path = PHOTOS_DIR if os.path.exists(PHOTOS_DIR) else os.path.expanduser("~")
+        path = PHOTOS_DIR if os.path.exists(PHOTOS_DIR) else "/home/dkumkum"
         stat = os.statvfs(path)
         free = stat.f_bavail * stat.f_bsize
         if free >= 1024 ** 3:
@@ -1792,12 +1792,12 @@ def index():
 
 @app.route("/logo")
 def logo():
-    return send_from_directory(os.path.expanduser("~"), "retrocamlogo.svg", mimetype="image/svg+xml")
+    return send_from_directory("/home/dkumkum", "retrocamlogo.svg", mimetype="image/svg+xml")
 
 
 @app.route("/font/<filename>")
 def font(filename):
-    return send_from_directory(os.path.expanduser("~"), filename)
+    return send_from_directory("/home/dkumkum", filename)
 
 
 @app.route("/photo/<filename>")
