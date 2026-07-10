@@ -734,7 +734,10 @@ body:has(#sel-bar.open) #dl-progress {
 <body>
 
 <header>
-  <img class="logo" src="/logo" alt="RETROCAM">
+  <div style="display:flex; flex-direction:column; align-items:flex-end; padding: 4px 0;">
+    <div style="font-family: 'CamFont', 'Courier New', monospace; font-size: 32px; letter-spacing: 2px; color: #fff; line-height: 1; font-weight: normal;">RETROCAM</div>
+    <div style="font-family: 'Courier New', monospace; font-size: 13px; color: #fff; letter-spacing: 0.5px; margin-top: 4px; line-height: 1;">Based on optocam</div>
+  </div>
 </header>
 
 <div class="toolbar">
