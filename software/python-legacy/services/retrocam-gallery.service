@@ -1,6 +1,6 @@
 [Unit]
-Description=OptoCam Gallery Web Server
-After=optocam-hotspot.service
+Description=RETROCAM Gallery Web Server
+After=retrocam-hotspot.service
 
 [Service]
 Type=simple

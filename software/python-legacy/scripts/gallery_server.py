@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OptoCam Gallery Server — serves photos over WiFi hotspot"""
+"""RETROCAM Gallery Server — serves photos over WiFi hotspot"""
 import os
 import io
 import json
@@ -8,7 +8,7 @@ import zipfile
 import tempfile
 from flask import Flask, send_from_directory, render_template_string, Response, request
 
-PHOTOS_DIR = "/home/dkumkum/photos"
+PHOTOS_DIR = os.path.expanduser("~/photos")
 
 MEDIA_EXTS = (".jpg", ".gif")
 
@@ -19,11 +19,11 @@ DOWNLOAD_PROGRESS = {}
 
 
 def capture_number_of(filename):
-    """Numeric id from Optocamzero_<n>.<ext>, or None. Shared ordering across
+    """Numeric id from RetroCam_<n>.<ext>, or None. Shared ordering across
     photos (.jpg) and GIFs (.gif)."""
-    if not filename.startswith("Optocamzero_"):
+    if not filename.startswith("RetroCam_"):
         return None
-    stem = filename[len("Optocamzero_"):]
+    stem = filename[len("RetroCam_"):]
     dot = stem.rfind(".")
     if dot == -1:
         return None
@@ -45,11 +45,11 @@ HTML = """<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Optocam Zero</title>
+<title>RETROCAM</title>
 <style>
 @font-face {
     font-family: 'CamFont';
-    src: url('/font/cmunvt.ttf') format('truetype');
+    src: url('/font/retrocam.otf') format('opentype');
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -734,7 +734,7 @@ body:has(#sel-bar.open) #dl-progress {
 <body>
 
 <header>
-  <img class="logo" src="/logo" alt="OptoCam">
+  <img class="logo" src="/logo" alt="RETROCAM">
 </header>
 
 <div class="toolbar">
@@ -1004,12 +1004,12 @@ function setDensity(v) {
         grid.classList.remove('cols-2', 'cols-3', 'cols-4');
         grid.classList.add('cols-' + v);
     }
-    try { localStorage.setItem('optocam_density', v); } catch (e) {}
+    try { localStorage.setItem('retrocam_density', v); } catch (e) {}
 }
 
 // Restore the saved density on load.
 try {
-    const d = localStorage.getItem('optocam_density');
+    const d = localStorage.getItem('retrocam_density');
     if (d && ['2', '3', '4'].includes(d)) setDensity(d);
 } catch (e) {}
 
@@ -1021,12 +1021,12 @@ function setDesktopDensity(v) {
         grid.classList.remove('dcols-5', 'dcols-6', 'dcols-7');
         grid.classList.add('dcols-' + v);
     }
-    try { localStorage.setItem('optocam_density_desktop', v); } catch (e) {}
+    try { localStorage.setItem('retrocam_density_desktop', v); } catch (e) {}
 }
 
 // Restore the saved desktop density on load.
 try {
-    const d = localStorage.getItem('optocam_density_desktop');
+    const d = localStorage.getItem('retrocam_density_desktop');
     if (d && ['5', '6', '7'].includes(d)) setDesktopDensity(d);
 } catch (e) {}
 
@@ -1754,7 +1754,7 @@ document.addEventListener('mouseup', e => {
 
 def get_free_space():
     try:
-        path = PHOTOS_DIR if os.path.exists(PHOTOS_DIR) else "/home/dkumkum"
+        path = PHOTOS_DIR if os.path.exists(PHOTOS_DIR) else os.path.expanduser("~")
         stat = os.statvfs(path)
         free = stat.f_bavail * stat.f_bsize
         if free >= 1024 ** 3:
@@ -1792,12 +1792,12 @@ def index():
 
 @app.route("/logo")
 def logo():
-    return send_from_directory("/home/dkumkum", "optocamlogo.svg", mimetype="image/svg+xml")
+    return send_from_directory(os.path.expanduser("~"), "retrocamlogo.svg", mimetype="image/svg+xml")
 
 
 @app.route("/font/<filename>")
 def font(filename):
-    return send_from_directory("/home/dkumkum", filename)
+    return send_from_directory(os.path.expanduser("~"), filename)
 
 
 @app.route("/photo/<filename>")
@@ -2039,7 +2039,7 @@ def download_zip():
     return Response(
         generate(),
         mimetype="application/zip",
-        headers={"Content-Disposition": "attachment; filename=optocam_photos.zip"}
+        headers={"Content-Disposition": "attachment; filename=retrocam_photos.zip"}
     )
 
 

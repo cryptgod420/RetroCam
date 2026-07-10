@@ -151,7 +151,7 @@ class CameraConfigCache:
         return self.gif_config
 
 config_cache = None
-FONT_PATH = "/home/pi/cmunvt.ttf"
+FONT_PATH = os.path.expanduser("~/retrocam.otf")
 
 _shadow_cache = {}
 _hud_overlay_cache = {"key": None, "img": None}
@@ -730,7 +730,7 @@ def display_image(image):
         send_data(convert_to_rgb565(image))
 
 def show_splash():
-    splash_path = "/home/pi/splash.raw"
+    splash_path = os.path.expanduser("~/splash.raw")
     if not os.path.exists(splash_path):
         return
     with open(splash_path, "rb") as f:
@@ -781,9 +781,9 @@ def show_transfer_mode_screen():
 
     draw.line([(8, 45), (312, 45)], fill=(40, 40, 40), width=1)
     draw.text((20, 55),  "WiFi",         font=font_label, fill=(100, 100, 100))
-    draw.text((20, 73),  "Optocam Zero", font=font_value, fill=(255, 255, 255))
+    draw.text((20, 73),  "RETROCAM", font=font_value, fill=(255, 255, 255))
     draw.text((20, 103),  "Password",     font=font_label, fill=(100, 100, 100))
-    draw.text((20, 121), "0026opto",     font=font_value, fill=(255, 255, 255))
+    draw.text((20, 121), "cryptgod",     font=font_value, fill=(255, 255, 255))
     draw.text((20, 151), "Browser",      font=font_label, fill=(100, 100, 100))
     draw.text((20, 169), "192.168.4.1",  font=font_value, fill=(255, 255, 255))
     draw.line([(8, 195), (312, 195)], fill=(40, 40, 40), width=1)
@@ -796,15 +796,15 @@ def show_transfer_mode_screen():
 
     display_image(img)
 
-GALLERY_DIR = "/home/pi/photos"
+GALLERY_DIR = os.path.expanduser("~/photos")
 
 _capture_counter = None
 _capture_counter_lock = threading.Lock()
 
 def _capture_number_of(filename):
-    if not filename.startswith("Optocamzero_"):
+    if not filename.startswith("RetroCam_"):
         return None
-    stem = filename[len("Optocamzero_"):]
+    stem = filename[len("RetroCam_"):]
     dot = stem.rfind(".")
     if dot == -1:
         return None
@@ -1021,7 +1021,7 @@ def capture_full_res(picam2):
 
             os.makedirs(GALLERY_DIR, exist_ok=True)
             number = get_next_capture_number()
-            filename = f"Optocamzero_{number}.jpg"
+            filename = f"RetroCam_{number}.jpg"
             filepath = os.path.join(GALLERY_DIR, filename)
 
             if camera_started:
@@ -1173,7 +1173,7 @@ def record_gif(picam2):
 
             os.makedirs(GALLERY_DIR, exist_ok=True)
             number = get_next_capture_number()
-            filename = f"Optocamzero_{number}.gif"
+            filename = f"RetroCam_{number}.gif"
             filepath = os.path.join(GALLERY_DIR, filename)
 
             if camera_started:
@@ -1419,8 +1419,8 @@ def button_handler():
                         print("Transfer mode ON")
                         _transfer_last_activity = time.time()
                         _transfer_dimmed = False
-                        subprocess.Popen(["sudo", "systemctl", "start", "optocam-hotspot.service"])
-                        subprocess.Popen(["sudo", "systemctl", "start", "optocam-gallery.service"])
+                        subprocess.Popen(["sudo", "systemctl", "start", "retrocam-hotspot.service"])
+                        subprocess.Popen(["sudo", "systemctl", "start", "retrocam-gallery.service"])
                     else:
                         preview_active = True
                         print("Transfer mode OFF")
@@ -1429,8 +1429,8 @@ def button_handler():
                         _transfer_dimmed = False
                         _idle_last_activity = time.time()
                         _idle_dimmed = False
-                        subprocess.Popen(["sudo", "systemctl", "stop", "optocam-hotspot.service"])
-                        subprocess.Popen(["sudo", "systemctl", "stop", "optocam-gallery.service"])
+                        subprocess.Popen(["sudo", "systemctl", "stop", "retrocam-hotspot.service"])
+                        subprocess.Popen(["sudo", "systemctl", "stop", "retrocam-gallery.service"])
             elif not joy_is_down and joy_press_was_down:
                 joy_press_was_down = False
                 if not joy_long_press_fired and now - joy_press_down_time > 0.02:

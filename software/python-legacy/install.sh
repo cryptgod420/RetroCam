@@ -17,7 +17,7 @@ INSTALL_HOME=$(getent passwd "$INSTALL_USER" | cut -d: -f6)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  OptoCamZero Installer${NC}"
+echo -e "${GREEN}  RETROCAM Installer${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo "User:     $INSTALL_USER"
 echo "Home:     $INSTALL_HOME"
@@ -36,30 +36,30 @@ pip3 install spidev pigpio
 
 # ── 3. Copy scripts ───────────────────────────────────────────────────────────
 echo -e "${YELLOW}[3/9] Copying scripts and assets...${NC}"
-cp "$SCRIPT_DIR/scripts/optocamzero.py"  "$INSTALL_HOME/optocamzero.py"
+cp "$SCRIPT_DIR/scripts/retrocam.py"  "$INSTALL_HOME/retrocam.py"
 cp "$SCRIPT_DIR/scripts/gallery_server.py" "$INSTALL_HOME/gallery_server.py"
 
-cp "$SCRIPT_DIR/assets/cmunvt.ttf"       "$INSTALL_HOME/cmunvt.ttf"
-cp "$SCRIPT_DIR/assets/optocamlogo.svg"  "$INSTALL_HOME/optocamlogo.svg"
+cp "$SCRIPT_DIR/assets/retrocam.otf"       "$INSTALL_HOME/retrocam.otf"
+cp "$SCRIPT_DIR/assets/retrocamlogo.svg"  "$INSTALL_HOME/retrocamlogo.svg"
 cp "$SCRIPT_DIR/assets/splash.raw"       "$INSTALL_HOME/splash.raw"
 
 # Replace hardcoded paths with actual user home
-sed -i "s|/home/dkumkum|$INSTALL_HOME|g" "$INSTALL_HOME/optocamzero.py"
+sed -i "s|/home/dkumkum|$INSTALL_HOME|g" "$INSTALL_HOME/retrocam.py"
 sed -i "s|/home/dkumkum|$INSTALL_HOME|g" "$INSTALL_HOME/gallery_server.py"
 
 # Create photos directory
 mkdir -p "$INSTALL_HOME/photos"
 chown -R "$INSTALL_USER:$INSTALL_USER" \
-    "$INSTALL_HOME/optocamzero.py" \
+    "$INSTALL_HOME/retrocam.py" \
     "$INSTALL_HOME/gallery_server.py" \
-    "$INSTALL_HOME/cmunvt.ttf" \
-    "$INSTALL_HOME/optocamlogo.svg" \
+    "$INSTALL_HOME/retrocam.otf" \
+    "$INSTALL_HOME/retrocamlogo.svg" \
     "$INSTALL_HOME/splash.raw" \
     "$INSTALL_HOME/photos"
 
 # ── 4. Service files ──────────────────────────────────────────────────────────
 echo -e "${YELLOW}[4/9] Installing systemd services...${NC}"
-for svc in camera-auto optocam-hotspot optocam-gallery uap0; do
+for svc in camera-auto retrocam-hotspot retrocam-gallery uap0; do
     cp "$SCRIPT_DIR/services/$svc.service" "/etc/systemd/system/$svc.service"
     sed -i "s|/home/dkumkum|$INSTALL_HOME|g" "/etc/systemd/system/$svc.service"
     sed -i "s|dkumkum|$INSTALL_USER|g"       "/etc/systemd/system/$svc.service"
@@ -68,7 +68,7 @@ done
 # ── 5. Hotspot config ─────────────────────────────────────────────────────────
 echo -e "${YELLOW}[5/9] Configuring hotspot...${NC}"
 cp "$SCRIPT_DIR/services/hostapd.conf" "/etc/hostapd/hostapd.conf"
-cp "$SCRIPT_DIR/services/dnsmasq-optocam.conf" "/etc/dnsmasq.d/optocam.conf"
+cp "$SCRIPT_DIR/services/dnsmasq-retrocam.conf" "/etc/dnsmasq.d/retrocam.conf"
 
 # Point hostapd to its config file (masked by default on Pi OS)
 systemctl unmask hostapd
@@ -76,7 +76,7 @@ sed -i 's|#DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default
 
 # Tell NetworkManager to leave uap0 alone
 mkdir -p /etc/NetworkManager/conf.d
-cat > /etc/NetworkManager/conf.d/optocam-unmanaged.conf << 'EOF'
+cat > /etc/NetworkManager/conf.d/retrocam-unmanaged.conf << 'EOF'
 [keyfile]
 unmanaged-devices=interface-name:uap0
 EOF
@@ -160,7 +160,7 @@ fi
 # Load the camera stack at sysinit instead of waiting for udev coldplug (~7.5s), so
 # the camera is probed by the time the early-starting script opens it. modprobe
 # pulls in dependencies; module names absent on a given kernel are simply skipped.
-cat > /etc/modules-load.d/optocam-camera.conf << 'EOF'
+cat > /etc/modules-load.d/retrocam-camera.conf << 'EOF'
 i2c-bcm2835
 bcm2835-isp
 bcm2835-unicam-legacy
@@ -171,7 +171,7 @@ EOF
 # snd_soc modules get pulled in as hard DEPENDENCIES of vc4-kms-v3d and load
 # regardless of this blacklist (and vc4-kms-v3d must stay — see CMA note above), so
 # the saving is small. It costs nothing, so we keep it to avoid the snd_bcm2835 load.
-cat > /etc/modprobe.d/optocam-blacklist.conf << 'EOF'
+cat > /etc/modprobe.d/retrocam-blacklist.conf << 'EOF'
 blacklist snd_bcm2835
 blacklist snd_soc_hdmi_codec
 blacklist snd_soc_core
@@ -218,8 +218,8 @@ systemctl daemon-reload
 systemctl enable pigpiod
 systemctl enable uap0
 systemctl enable camera-auto
-systemctl disable optocam-hotspot 2>/dev/null || true
-systemctl disable optocam-gallery 2>/dev/null || true
+systemctl disable retrocam-hotspot 2>/dev/null || true
+systemctl disable retrocam-gallery 2>/dev/null || true
 systemctl disable hostapd 2>/dev/null || true
 systemctl disable dnsmasq 2>/dev/null || true
 systemctl disable ModemManager 2>/dev/null || true
@@ -237,7 +237,7 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Installation complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo "Camera will start automatically on next boot."
-echo "Hotspot: connect to 'Optocam Zero' — password: 0026opto"
+echo "Hotspot: connect to 'RETROCAM' — password: cryptgod"
 echo "Gallery: open 192.168.4.1 in a browser while connected to the hotspot"
 echo ""
 echo -e "${YELLOW}Rebooting in 5 seconds... (Ctrl+C to cancel)${NC}"

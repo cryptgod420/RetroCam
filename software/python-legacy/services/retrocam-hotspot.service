@@ -1,5 +1,5 @@
 [Unit]
-Description=OptoCam WiFi Hotspot
+Description=RETROCAM WiFi Hotspot
 After=uap0.service
 Requires=uap0.service
 

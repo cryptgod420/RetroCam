@@ -1,10 +1,10 @@
-# Optocam Zero Firmware Installation and Interface Controls
+# RETROCAM Firmware Installation and Interface Controls
 
 <br>
 
 ## Requirements
 
-- Completed Optocam Zero with the correct components.
+- Completed RETROCAM with the correct components.
 - Micro sd card (16GB or larger, A2 type recommended for best performance).
 - A computer with internet access.
 
@@ -14,7 +14,7 @@
 
 **1. Download the firmware image**
 
-Download the latest Optocam Zero image (`.img`) from the [releases page](https://github.com/dorukkumkumoglu/optocamzero/releases/latest).
+Download the latest RETROCAM image (`.img`) from the [releases page](https://github.com/dorukkumkumoglu/optocamzero/releases/latest).
 
 **2. Flash the SD card**
 
@@ -57,10 +57,10 @@ Currently, 8 different photo filters are included. You can switch between them. 
 - To exit the gallery, press the center joystick button or the shutter button. This will return to the main camera preview immediately.
 
 ### Transfer mode (Hotspot)
-Optocam Zero includes a hotspot mode and photo transfer interface optimized for both mobile and desktop use.
+RETROCAM includes a hotspot mode and photo transfer interface optimized for both mobile and desktop use.
 - To activate transfer mode, long press the center joystick button.
 - Long press the center joystick button again to exit transfer mode.
-- To transfer images, connect your phone or computer to the Wi-Fi network called **Optocam Zero** (find the password on the screen) and open **192.168.4.1** in a browser.
+- To transfer images, connect your phone or computer to the Wi-Fi network called **RETROCAM** (find the password on the screen) and open **192.168.4.1** in a browser.
 - The dot in the top right corner and the number next to it indicate how many devices are currently connected to the hotspot. The dot turns green when a device is connected.
 
 ### Transfer interface (External Device)

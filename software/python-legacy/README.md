@@ -5,7 +5,7 @@
 
 ## Requirements
 
-- Completed Optocam Zero with the correct components.
+- Completed RETROCAM with the correct components.
 - Micro sd card (16GB or larger, A2 type recommended for best performance).
 - A computer with internet access.
 

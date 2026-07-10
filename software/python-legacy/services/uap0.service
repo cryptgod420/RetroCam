@@ -1,7 +1,7 @@
 [Unit]
 Description=Create uap0 virtual WiFi AP interface
 After=network.target
-Before=optocam-hotspot.service
+Before=retrocam-hotspot.service
 
 [Service]
 Type=oneshot

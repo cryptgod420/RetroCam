@@ -1,5 +1,5 @@
 [Unit]
-Description=Optocam Zero Camera System
+Description=RETROCAM Camera System
 # Start as early as possible — only wait for the root filesystem, NOT for
 # pigpiod/basic.target/sysinit. The script's own readiness waits (connect_pigpiod,
 # /dev/gpiomem + /dev/spidev0.0 waits, camera-enumeration wait) handle hardware
@@ -8,14 +8,14 @@ Description=Optocam Zero Camera System
 After=local-fs.target
 Wants=pigpiod.service
 DefaultDependencies=false
-ConditionPathExists=/home/dkumkum/optocamzero.py
+ConditionPathExists=/home/dkumkum/retrocam.py
 
 [Service]
 Type=simple
 User=root
 Group=root
 WorkingDirectory=/home/dkumkum
-ExecStart=/usr/bin/python3 /home/dkumkum/optocamzero.py
+ExecStart=/usr/bin/python3 /home/dkumkum/retrocam.py
 Restart=on-failure
 RestartSec=3
 StandardOutput=journal
