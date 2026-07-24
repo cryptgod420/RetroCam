@@ -1054,8 +1054,6 @@ def capture_full_res(picam2):
                 print("✗ Capture failed")
                 return None
 
-            captured_image = captured_image.transpose(Image.FLIP_LEFT_RIGHT)
-
         capturing = False
         print("✓ Preview resuming...")
 
@@ -1197,7 +1195,7 @@ def record_gif(picam2):
                     req = picam2.capture_request()
                     frame = req.make_image("main")
                     req.release()
-                    disp = frame.transpose(Image.FLIP_LEFT_RIGHT).resize((320, 240), Image.BILINEAR)
+                    disp = frame.resize((320, 240), Image.BILINEAR)
                     disp = _apply_filter_by_name(disp, film_name, apply_grain=False)
                     lbl = f"1/{GIF_FRAMES}"
                     if lbl != rec_label:
@@ -1226,7 +1224,6 @@ def record_gif(picam2):
                     except Exception:
                         frame = None
                     if frame is not None:
-                        frame = frame.transpose(Image.FLIP_LEFT_RIGHT)
                         disp = frame.resize((320, 240), Image.BILINEAR)
                         disp = _apply_filter_by_name(disp, film_name, apply_grain=False)
                         if frame_label != rec_label:
@@ -1900,9 +1897,6 @@ def main():
                                 preview_image = req.make_image("main")
                                 metadata = req.get_metadata()
                                 req.release()
-                                
-                                # MIRRORED FOR LANDSCAPE
-                                preview_image = preview_image.transpose(Image.FLIP_LEFT_RIGHT)
                                 
                                 if first_preview_frame_pending and cold_start_pending:
                                     cold_start_pending = False
