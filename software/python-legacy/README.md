@@ -1,5 +1,5 @@
 > ⚠️ 
-> This is the original Raspberry Pi OS / Python version. It still works, but it's no longer the recommended install (slower boot, not updated). For the current firmware installation, see the [software README](../README.md).
+> This is the legacy Raspberry Pi OS / Python installation. To install the RETROCAM firmware, see the [software README](../README.md).
 
 <br>
 
@@ -44,7 +44,8 @@ sudo apt-get install -y git
 ```
 
 ```
-git clone https://github.com/dorukkumkumoglu/optocamzero.git && sudo bash optocamzero/software/python-legacy/install.sh
+git clone https://github.com/cryptgod420/RetroCam.git
+sudo bash RetroCam/software/python-legacy/install.sh
 ```
 
 Installation takes about 10-15 minutes. The Pi reboots automatically when done and the camera starts immediately.
