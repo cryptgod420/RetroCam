@@ -12,21 +12,36 @@
 
 ## Installation
 
-**1. Download the firmware image**
+**1. Flash the SD card**
 
-Download the latest RETROCAM image (`.img`) from the [releases page](https://github.com/dorukkumkumoglu/optocamzero/releases/latest).
+Download Raspberry Pi Imager from [raspberrypi.com/software](https://www.raspberrypi.com/software/) and install it. Select **Raspberry Pi Zero 2W** as the device and **Raspberry Pi OS Lite (32-bit) Bookworm** as the OS. You can find it under Raspberry Pi OS (other).
 
-**2. Flash the SD card**
+Before flashing, click **Edit Settings** and fill in your hostname, username, password, and WiFi credentials (remember to take note of this info). Go to the Services tab and enable SSH. Click Save, then flash the card.
 
-Download Raspberry Pi Imager from [raspberrypi.com/software](https://www.raspberrypi.com/software/) and install it. Select **Raspberry Pi Zero 2W** as the device. Under **Choose OS**, scroll to the bottom and select **Use custom**, then pick the image file you just downloaded.
+**2. First boot**
 
-Select your SD card under **Choose Storage**, then click **Write**. If asked whether to apply OS customisation settings, choose **No**.
+Insert the SD card into the Pi and power it on. Wait about 1-2 minutes for it to boot and connect to your WiFi.
 
-**3. First boot**
+**3. Connect via SSH**
 
-Insert the SD card into the Pi and power it on. The camera boots to the preview in about 5 seconds and is ready to use.
+Open Terminal on your computer and run:
 
-<br>
+```
+ssh your-username@your-hostname.local
+```
+
+Type `yes` when asked about the fingerprint, then enter your password.
+
+**4. Run the installer**
+
+```
+sudo apt-get update
+sudo apt-get install -y git
+git clone https://github.com/cryptgod420/RetroCam.git
+sudo bash RetroCam/software/python-legacy/install.sh
+```
+
+Installation takes about 10-15 minutes. The Pi reboots automatically when done and the camera starts immediately.
 
 <br>
 
@@ -37,8 +52,6 @@ The device is turned on and off using the power switch on the right side. Reachi
 Camera focus is set to continuous auto and cannot be adjusted manually. Camera shutter speed and ISO are set to auto and cannot be adjusted manually.
 
 Currently, 8 different photo filters are included. You can switch between them. Color temperature can also be changed.
-
-![Camera Screens](https://github.com/dorukkumkumoglu/optocamzero/blob/main/assets/optocam-screens.png)
 
 ### Main camera preview screen controls
 - Top left corner displays current color temperature (left-right joystick toggles between different color temperature modes).
@@ -60,19 +73,14 @@ Currently, 8 different photo filters are included. You can switch between them. 
 RETROCAM includes a hotspot mode and photo transfer interface optimized for both mobile and desktop use.
 - To activate transfer mode, long press the center joystick button.
 - Long press the center joystick button again to exit transfer mode.
-- To transfer images, connect your phone or computer to the Wi-Fi network called **RETROCAM** (find the password on the screen) and open **192.168.4.1** in a browser.
+- To transfer images, connect your phone or computer to the Wi-Fi network called **RETROCAM** (password: cryptgod) and open **192.168.4.1** in a browser.
 - The dot in the top right corner and the number next to it indicate how many devices are currently connected to the hotspot. The dot turns green when a device is connected.
 
 ### Transfer interface (External Device)
 After opening the address in a browser, the transfer interface will appear. All photos in your gallery are visible here and can be scrolled and browsed. Below the header logo, the total image count and available free space are displayed.
-
-![Transfer Interface](https://github.com/dorukkumkumoglu/optocamzero/blob/main/assets/hotspot-interface-1.png)
 
 - Photos can be downloaded individually by clicking the download icon in the top right corner of the photo.
 - Multiple photos can be selected using the selectors in the top left corner of each image. After selection, you may batch download or delete the selected photos.
 - For single image view, click on the image. Use the back button on screen to return, or swipe down on touch devices.
 - In single image view, use the left-right arrow keys or swipe left-right to browse between photos.
 - To view the full resolution image, click the HQ button in single image view.
-
-
-
