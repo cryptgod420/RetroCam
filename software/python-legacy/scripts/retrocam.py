@@ -472,21 +472,17 @@ _font_cache = {}
 _font_warned = False
 def load_font(size):
     global _font_warned
-    # The custom dot-matrix font renders smaller than the original font.
-    # Scale all requested font sizes up by 1.4x globally.
-    scaled_size = int(size * 1.4)
-    
-    if scaled_size in _font_cache:
-        return _font_cache[scaled_size]
+    if size in _font_cache:
+        return _font_cache[size]
     from PIL import ImageFont
     try:
-        _font_cache[scaled_size] = ImageFont.truetype(FONT_PATH, scaled_size)
+        _font_cache[size] = ImageFont.truetype(FONT_PATH, size)
     except (OSError, IOError) as e:
         if not _font_warned:
-            log(f"TTF load failed ({FONT_PATH}): {e!r} - using bitmap default")
+            log(f"TTF load failed ({FONT_PATH}): {e!r} — using bitmap default")
             _font_warned = True
-        _font_cache[scaled_size] = ImageFont.load_default()
-    return _font_cache[scaled_size]
+        _font_cache[size] = ImageFont.load_default()
+    return _font_cache[size]
 
 # ── Filters ────────────────────────────────────────────────────────────────
 FILTERS = ["Film Standard", "Punch", "B&W", "Deep", "Sand", "Eterna", "TRI-X", "Cutout", "No Filter"]

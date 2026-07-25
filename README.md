@@ -16,8 +16,6 @@ I designed RETROCAM to have a very compact, carry everywhere and have fun sort o
 - USB-C charging. Device can be used while charging.
 - Interchangable battery.
 - Off the shelf/ common components for the electronics.
-- Fully 3D printed case parts (apart from fasteners).
-- 3D printable TPU protective sleeve and lanyard design is available.
 - **NEW** - GIF recording and playback.
 
 <br>
@@ -33,13 +31,7 @@ I designed RETROCAM to have a very compact, carry everywhere and have fun sort o
   
 <br>
 
-## Sample Photos
-
-
-<img src="assets/Optocamzero_45.jpg" width="49%"/> <img src="assets/Optocamzero_166.jpg" width="49%"/>
-<img src="assets/Optocamzero_332.jpg" width="49%"/> <img src="assets/Optocamzero_333.jpg" width="49%"/>
-<img src="assets/Optocamzero_200.jpg" width="49%"/> <img src="assets/Optocamzero_69.jpg" width="49%"/>
-<img src="assets/Optocamzero_120.jpg" width="49%"/> <img src="assets/Optocamzero_133.jpg" width="49%"/>
+See [EXAMPLES.md](EXAMPLES.md) for photo examples taken with the RETROCAM!
 
 
 <br>
@@ -49,10 +41,9 @@ I designed RETROCAM to have a very compact, carry everywhere and have fun sort o
  
 Everything you need to build a RETROCAM yourself is included in this repo.
 
-All the 3d print files, Required parts list, and detailed step by step build guide can be found under the [hardware](hardware/) folder.
+The required parts list can be found under the [hardware](hardware/) folder.
 
 If you're considering building one, check the [BOM](hardware/BOM.md) to get an idea of the cost for required tools and parts.
-Also, have a look at the [build guide](hardware/optocamzero-build-guide.pdf), it will give you a clear idea of what the build involves.
 
 <br>
 
@@ -60,11 +51,7 @@ Also, have a look at the [build guide](hardware/optocamzero-build-guide.pdf), it
 
 See the [hardware](hardware/) folder for:
 
-- [Bill of materials](hardware/BOM.md).
-- [Build guide](hardware/optocamzero-build-guide.pdf) (PDF).
-- [Bambu Studio project files](hardware/print-ready/) ready to print for transparent PETG or PETG / PETG-CF.
-- [Individual .stls](hardware/stls/) for camera parts.
-- [CAD file](hardware/cad/optocamzero_V1.0.step) for customization.
+- [Bill of materials and Hardware Parts](hardware/BOM.md).
 
 
 <br>
